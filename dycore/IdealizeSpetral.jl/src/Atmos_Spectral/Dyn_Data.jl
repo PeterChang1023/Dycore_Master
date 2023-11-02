@@ -160,6 +160,16 @@ mutable struct Dyn_Data
     
     spe_zeros::Array{ComplexF64,3}
     
+    ### 10/31
+    grid_t_eq_ref::Array{Float64,3}
+    grid_tracers_ref::Array{Float64,3}
+    
+    # spe_tracers_q_n::Array{ComplexF64,3}
+    # spe_tracers_q_c::Array{ComplexF64,3}
+    # spe_tracers_q_p::Array{ComplexF64,3}
+    
+    spe_tracers_ref::Array{ComplexF64,3}
+    
 end
 
 function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::Int64, nθ::Int64, nd::Int64, 
@@ -303,6 +313,17 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
 
     spe_zeros = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
     
+    ### 10/31
+    grid_t_eq_ref   = zeros(Float64, nλ,  nθ, nd)
+    grid_tracers_ref = zeros(Float64, nλ,  nθ, nd)
+    
+    # spe_tracers_q_n = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
+    # spe_tracers_q_c = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
+    # spe_tracers_q_p = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
+    
+    spe_tracers_ref = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
+    
+    
     Dyn_Data(name, num_fourier, num_spherical, nλ, nθ, nd, num_grid_tracters, num_spe_tracters,
     spe_vor_n, spe_vor_c, spe_vor_p, 
     spe_div_n, spe_div_c, spe_div_p, 
@@ -331,7 +352,7 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
     grid_z_full, grid_z_half,grid_t_eq,
     #########################################################################
     spe_d1, spe_d2, grid_d_full1, grid_d_full2, grid_d_half1, grid_d_half2,
-    spe_zeros)
+    spe_zeros, grid_t_eq_ref, grid_tracers_ref, spe_tracers_ref)
 end
 
 function Time_Advance!(dyn_data::Dyn_Data)

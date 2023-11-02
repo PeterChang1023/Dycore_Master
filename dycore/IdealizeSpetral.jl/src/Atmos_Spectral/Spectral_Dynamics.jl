@@ -89,7 +89,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         
         ### 10/30 
-        # @info (mean_moisture_n - mean_moisture_p)
+        @info "# mass correction:", (mean_moisture_n - mean_moisture_p)
         
 
 
@@ -263,7 +263,6 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     spe_tracers_n = dyn_data.spe_tracers_n
     spe_tracers_c = dyn_data.spe_tracers_c
     spe_tracers_p = dyn_data.spe_tracers_p 
-        
     
     grid_tracers_n = dyn_data.grid_tracers_n
     grid_tracers_c = dyn_data.grid_tracers_c
@@ -271,15 +270,25 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     
     grid_tracers_diff = dyn_data.grid_tracers_diff
     
-    
-    
-    
     spe_δtracers   = dyn_data.spe_δtracers  .*0.
     grid_δtracers  = dyn_data.grid_δtracers .*0.
     grid_tracers_full = dyn_data.grid_tracers_full
     
     #### 10/30
     grid_t_eq = dyn_data.grid_t_eq
+    
+    # grid_tracers_q   = dyn_data.grid_tracers_q
+    grid_tracers_ref = dyn_data.grid_tracers_ref
+    
+    # spe_tracers_q_n  = dyn_data.spe_tracers_q_n
+    # spe_tracers_q_c  = dyn_data.spe_tracers_q_c
+    # spe_tracers_q_p  = dyn_data.spe_tracers_q_p
+    
+    spe_tracers_ref  = dyn_data.spe_tracers_ref
+    ### 11/01
+    grid_t_eq_ref   = dyn_data.grid_t_eq_ref
+    
+    
     ###
     # todo !!!!!!!!
     #  grid_q = grid_t
@@ -344,12 +353,11 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Vert_Advection!(vert_coord, grid_t, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme, grid_δQ)
     grid_δt  .+= grid_δQ
     ### By CJY2
-    Vert_Advection!(vert_coord, grid_tracers_c, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme,  grid_δQ)
-    grid_δtracers .+= grid_δQ
-    
+    Vert_Advection!(vert_coord, grid_tracers_ref.+grid_tracers_c, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme,  grid_δQ)
+    grid_δtracers .+= grid_δQ ########## 10/31 + q_ref: done!
     ### spectral tracers need to be done first 
-    Add_Horizontal_Advection!(mesh, spe_tracers_c, grid_u, grid_v, grid_δtracers)
-    Trans_Grid_To_Spherical!(mesh, grid_δtracers, spe_δtracers)
+    Add_Horizontal_Advection!(mesh, spe_tracers_ref .+ spe_tracers_c, grid_u, grid_v, grid_δtracers) ### use q cal advection
+    Trans_Grid_To_Spherical!(mesh, grid_δtracers, spe_δtracers) # but add tendency on to q'
     Compute_Spectral_Damping!(integrator, spe_tracers_c, spe_tracers_p, spe_δtracers)
     Filtered_Leapfrog!(integrator, spe_δtracers, spe_tracers_p, spe_tracers_c, spe_tracers_n)
     Trans_Spherical_To_Grid!(mesh, spe_tracers_n, grid_tracers_n)
@@ -357,10 +365,10 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
    
     ###
     Add_Horizontal_Advection!(mesh, spe_t_c, grid_u, grid_v, grid_δt)
-    grid_tracers_diff_new = HS_forcing_water_vapor!(grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_t_eq)
+    grid_tracers_diff_new = HS_forcing_water_vapor!(grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_t_eq_ref)
     grid_tracers_diff .= grid_tracers_diff_new
     ### 10/30
-    @info maximum(grid_tracers_diff)
+    # @info maximum(grid_tracers_diff)
     ###
     Trans_Grid_To_Spherical!(mesh, grid_δt, spe_δt)
    
@@ -478,15 +486,14 @@ end
 function Get_Topography!(grid_geopots::Array{Float64, 3})
     #####grid_geopots .= 0.0
     ### 2023/10/25
-    read_file = load("0404_300_50_8_variables.dat")
+    read_file = load("300day_dry_all.dat")
     # read_file = load("800day_HS_front_RH50_PR5_PRRELAX86400_with_w_all.dat")
     ###
     grid_geopots .= read_file["grid_geopots_xyzt"][:,:,1,300]
     return
 end 
 
-function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data, vert_coord::Vert_Coordinate, sea_level_ps_ref::Float64, init_t::Float64,
-    grid_geopots::Array{Float64,3}, dyn_data::Dyn_Data)
+function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data, vert_coord::Vert_Coordinate, sea_level_ps_ref::Float64, init_t::Float64, grid_geopots::Array{Float64,3}, dyn_data::Dyn_Data, Δt::Int64, physics_params::Dict{String, Float64})
     
     spe_vor_c, spe_div_c, spe_lnps_c, spe_t_c = dyn_data.spe_vor_c, dyn_data.spe_div_c, dyn_data.spe_lnps_c, dyn_data.spe_t_c
     spe_vor_p, spe_div_p, spe_lnps_p, spe_t_p = dyn_data.spe_vor_p, dyn_data.spe_div_p, dyn_data.spe_lnps_p, dyn_data.spe_t_p
@@ -509,19 +516,45 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     
     grid_tracers_diff = dyn_data.grid_tracers_diff
     ###
+    ### 10/31
+    grid_δu, grid_δv, grid_δps, grid_δt = dyn_data.grid_δu, dyn_data.grid_δv, dyn_data.grid_δps, dyn_data.grid_δt
+    grid_u_p, grid_v_p,  grid_t_p = dyn_data.grid_u_p, dyn_data.grid_v_p, dyn_data.grid_t_p
+    grid_p_half, grid_p_full = dyn_data.grid_p_half, dyn_data.grid_p_full
+    # grid_t_eq = dyn_data.grid_t_eq
     
-    ### 10/30
-    grid_t_eq = dyn_data.grid_t_eq
+    grid_t_eq_ref   = dyn_data.grid_t_eq_ref
+    grid_tracers_ref = dyn_data.grid_tracers_ref
     ###
+    spe_tracers_ref = dyn_data.spe_tracers_ref
+    
+    ### 11/02
+    read_file = load("300day_dry_all.dat")
+    initial_day = 300
+    grid_δu       .= read_file["grid_δu_xyzt"][:,:,:,initial_day]
+    grid_δv       .= read_file["grid_δv_xyzt"][:,:,:,initial_day]
+    grid_δt       .= read_file["grid_δt_xyzt"][:,:,:,initial_day]
+    grid_δps       .= read_file["grid_δps_xyzt"][:,:,1,initial_day]
+
+    ### FIXME
+    # grid_u_p .= read_file["grid_u_c_xyzt"][:,:,:,initial_day-1]
+    # grid_v_p .= read_file["grid_v_c_xyzt"][:,:,:,initial_day-1]
+    # grid_t_p .= read_file["grid_t_c_xyzt"][:,:,:,initial_day-1]
+
+    grid_p_half .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
+    grid_p_full .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
+
+    # grid_t_eq .= read_file["grid_t_eq_xyzt"][:,:,:,initial_day]
+    ###
+    
     
     rdgas = atmo_data.rdgas
     #grid_t    .= init_t
     ### 2023/10/25
-    read_file = load("0404_300_50_8_variables.dat")
+    # read_file = load("300day_dry_all.dat")
     # read_file = load("800day_HS_front_RH50_PR5_PRRELAX86400_with_w_all.dat")
     ###
     
-    initial_day = 300
+    # initial_day = 300
     ### 2023/10/27
     grid_t    .= read_file["grid_t_c_xyzt"][:,:,:,initial_day] 
     ###
@@ -605,13 +638,39 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     Lv              = 2.5*10^6.
     Rv              = 461.
     ### 2023/10/25
-    # grid_tracers_c .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) 
+    grid_tracers_c .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) 
     ###
     # grid_tracers_c .= read_file["grid_tracers_c_xyz1t"][:,:,:,initial_day]
     ###
-    ### By CJY1030
-    grid_t_eq   .= read_file["grid_t_eq_xyzt"][:,:,:,initial_day]
-    grid_tracers_c .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq)) .* initial_RH)) 
+    ### By 11/02
+    ### original
+    # grid_δps .= 0.0
+    ###
+    
+    grid_t_eq_ref .= zeros(size(grid_tracers_c)...)
+    grid_t_eq_ref .= HS_Forcing_return_teq!(atmo_data, Δt, mesh.sinθ, grid_u_p, grid_v_p, grid_p_half, grid_p_full, grid_t_p, grid_δu, grid_δv, grid_t_eq_ref, grid_δt, physics_params)
+    
+    grid_tracers_ref0 = zeros(size(grid_tracers_c)...)
+    # grid_tracers_ref  = zeros(size(grid_tracers_c)...)
+    grid_tracers_q    = zeros(size(grid_tracers_c)...)
+    
+    ### cal q(t)
+    grid_tracers_q .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) 
+    
+    ### cal q_ref(teq)
+    grid_tracers_ref0 .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) .* initial_RH)) 
+    
+    ### cal q_ref_final = q_ref * global(q) / global(q_ref)
+    grid_tracers_ref .= grid_tracers_ref0 .* (Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_q, grid_ps) ./ Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_ref0, grid_ps))
+    
+    ### cal q' = q - q_ref
+    grid_tracers_c .= zeros(size(grid_tracers_c)...)
+    # grid_tracers_c .= grid_tracers_q .- grid_tracers_ref
+    
+    ### 11/01
+    Trans_Grid_To_Spherical!(mesh, grid_tracers_ref, spe_tracers_ref)
+    Trans_Spherical_To_Grid!(mesh, spe_tracers_ref, grid_tracers_ref)
+    
     ###
     Trans_Grid_To_Spherical!(mesh, grid_tracers_c, spe_tracers_c)
     Trans_Spherical_To_Grid!(mesh, spe_tracers_c, grid_tracers_c)
@@ -636,7 +695,8 @@ function Spectral_Dynamics_Physics!(atmo_data::Atmo_Data, mesh::Spectral_Spheric
     
     HS_Forcing!(atmo_data, Δt, mesh.sinθ, grid_u_p, grid_v_p, grid_p_half, grid_p_full, grid_t_p, grid_δu, grid_δv,
     grid_t_eq, grid_δt, physics_params)
-
+    
+    
 end
 
 
@@ -646,9 +706,9 @@ function Atmosphere_Update!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
     Δt = Get_Δt(semi_implicit.integrator)
     Spectral_Dynamics_Physics!(atmo_data, mesh,  dyn_data, Δt, physcis_params)
     Spectral_Dynamics!(mesh,  vert_coord , atmo_data, dyn_data, semi_implicit)
+    ### original
+    grid_ps , grid_Δp, grid_p_half, grid_lnp_half, grid_p_full, grid_lnp_full = dyn_data.grid_ps_c,  dyn_data.grid_Δp, dyn_data.grid_p_half, dyn_data.grid_lnp_half, dyn_data.grid_p_full, dyn_data.grid_lnp_full 
     
-    grid_ps , grid_Δp, grid_p_half, grid_lnp_half, grid_p_full, grid_lnp_full = dyn_data.grid_ps_c,  dyn_data.grid_Δp, dyn_data.grid_p_half, 
-                                                                                dyn_data.grid_lnp_half, dyn_data.grid_p_full, dyn_data.grid_lnp_full 
     grid_t = dyn_data.grid_t_c
     grid_geopots, grid_z_full, grid_z_half = dyn_data.grid_geopots, dyn_data.grid_z_full, dyn_data.grid_z_half
         
@@ -660,39 +720,57 @@ function Atmosphere_Update!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
 end 
 
 
-function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_t_eq::Array{Float64, 3})######### 10/30
+function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_t_eq_ref::Array{Float64, 3})######### 10/30
 
     cp  = 1004.
     Lv = 2.5*10^6.
     Rv = 461.
-    grid_tracers_diff   = zeros(size(grid_tracers_c)...)
-    grid_tracers_c_max  = zeros(size(grid_tracers_c)...)
-    grid_tracers_c_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ######### 10/30 cc equation should use grid_t
+    grid_tracers_diff      = zeros(size(grid_tracers_c)...)
+    grid_tracers_c_max     = zeros(size(grid_tracers_c)...)
+    grid_tracers_t_eq_ref  = zeros(size(grid_tracers_c)...)
     
-    grid_tracers_diff  .= max.(0.,grid_tracers_c.-grid_tracers_c_max)
+    grid_tracers_c_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ######### 10/30 cc equation should use q'+q_ref
+    
+    grid_tracers_t_eq_ref .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) )) ######### 10/30 cc equation should use grid_t
+    
+    
+    ### original
+    # grid_tracers_diff  .= max.(0.,grid_tracers_c.-grid_tracers_c_max)
+    ###
+    ### 10/31
+    grid_tracers_diff  .= max.(grid_tracers_c_max, grid_tracers_c .+ grid_tracers_t_eq_ref) .- grid_tracers_c_max ### 10/31
+    ###
+    
 
 
     # FIXME
     day_to_sec = 86400.
-    L = 0.15
+    L = 0.3
     ### 2023/10/28
     ### ice
-#     Ls = 2.83 * 10^6.
-#     grid_t_minus   = zeros(size(grid_tracers_c)...)
-#     grid_t_minus_final   = zeros(size(grid_tracers_c)...)
+    # Ls = 2.83 * 10^6.
+    # grid_t_minus   = zeros(size(grid_tracers_c)...)
+    # grid_t_minus_final    = zeros(size(grid_tracers_c)...)
+    # grid_t_minus_final2   = zeros(size(grid_tracers_c)...)
+
     
-#     grid_t_plus   = zeros(size(grid_tracers_c)...)
-#     grid_t_plus_final   = zeros(size(grid_tracers_c)...)
+    # grid_t_plus   = zeros(size(grid_tracers_c)...)
+    # grid_t_plus_final    = zeros(size(grid_tracers_c)...)
+    # grid_t_plus_final2   = zeros(size(grid_tracers_c)...)
     
-#     grid_t_minus .= min.(0., grid_t)
-#     grid_t_minus_final .= ifelse.(grid_t_minus .< 0, grid_t_minus, grid_t_minus .= 1)
-#     grid_δt  .+= (grid_tracers_diff .* grid_t_minus_final .* Ls ./ cp)./day_to_sec .* L
+    # grid_t_minus .= min.(0., grid_t.-273.15)
+    # grid_t_minus_final  .= ifelse.(grid_t_minus .< 0, grid_t_minus, grid_t_minus .= 0)
+    # grid_t_minus_final2 .= ifelse.(grid_t_minus_final .> 0, grid_t_minus_final, grid_t_minus .= 1)
+    # grid_δt  .+= (grid_tracers_diff .* grid_t_minus_final2 .* Ls ./ cp)./day_to_sec .* L
     
-#     grid_t_plus .= max.(0., grid_t)
-#     grid_t_plus_final .= ifelse.(grid_t_plus .> 0, grid_t_plus, grid_t_plus .= 1)
-#     grid_δt  .+= (grid_tracers_diff .* grid_t_plus_final .* Lv ./ cp)./day_to_sec .* L  
+    # grid_t_plus .= max.(0., grid_t.-273.15)
+    # grid_t_plus_final  .= ifelse.(grid_t_plus .> 0, grid_t_plus, grid_t_plus .= 0)
+    # grid_t_plus_final2 .= ifelse.(grid_t_plus_final .< 0, grid_t_plus, grid_t_plus .= 1)
+    # grid_δt  .+= (grid_tracers_diff .* grid_t_plus_final2 .* Lv ./ cp)./day_to_sec .* L  
     ###
+    ### only water condense
     grid_δt  .+= (grid_tracers_diff  .* Lv ./ cp)./day_to_sec .* L
+    ###
  
     # @info maximum((grid_tracers_diff .* Lv ./ cp))
     

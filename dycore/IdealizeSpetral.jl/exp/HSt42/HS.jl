@@ -68,8 +68,7 @@ function Atmos_Spectral_Dynamics_Main(physcis_params::Dict{String, Float64}, end
     
     Get_Topography!(dyn_data.grid_geopots)
     
-    Spectral_Initialize_Fields!(mesh, atmo_data, vert_coord, sea_level_ps_ref, init_t,
-    dyn_data.grid_geopots, dyn_data)
+    Spectral_Initialize_Fields!(mesh, atmo_data, vert_coord, sea_level_ps_ref, init_t, dyn_data.grid_geopots, dyn_data, Δt, physcis_params)
     
     
     Atmosphere_Update!(mesh, atmo_data, vert_coord, semi_implicit, dyn_data, physcis_params)
