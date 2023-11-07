@@ -78,18 +78,32 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
         grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
         
-        mean_moisture_p =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
-        mean_moisture_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        unsaturated_n  = zeros(size(grid_tracers_c)...)
+        #unsaturated_n .= grid_tracers_n_max.-grid_tracers_n
+        unsaturated_n .= grid_tracers_n_max
+        #unsaturated_n[(grid_tracers_n .- grid_tracers_n_max) .==0] .= 0
+        mean_unsaturated_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, unsaturated_n, grid_ps_n)
+        #grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max) # take line79 to here
+
+        mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
+        mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
         
+
+        # grid_tracers_n[(grid_tracers_n .- grid_tracers_n_max) .<0] 
+        unsaturated_n .*= (mean_moisture_p-mean_moisture_n)/mean_unsaturated_n
+        grid_tracers_n .+=  unsaturated_n
+
+        """ original
         grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
-        
         grid_tracers_n .+=  grid_tracers_n_max
+        """
+
 #        grid_tracers_n .+=  mean_moisture_p/mean_moisture_n
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         
         ### 10/30 
-        @info "# mass correction:", (mean_moisture_n - mean_moisture_p)
+        @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
         
 
 
@@ -353,10 +367,13 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Vert_Advection!(vert_coord, grid_t, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme, grid_δQ)
     grid_δt  .+= grid_δQ
     ### By CJY2
-    Vert_Advection!(vert_coord, grid_tracers_ref.+grid_tracers_c, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme,  grid_δQ)
+    Vert_Advection!(vert_coord, grid_tracers_ref, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme,  grid_δQ)
     grid_δtracers .+= grid_δQ ########## 10/31 + q_ref: done!
     ### spectral tracers need to be done first 
-    Add_Horizontal_Advection!(mesh, spe_tracers_ref .+ spe_tracers_c, grid_u, grid_v, grid_δtracers) ### use q cal advection
+    ### original
+    # Add_Horizontal_Advection!(mesh, spe_tracers_ref .+ spe_tracers_c, grid_u, grid_v, grid_δtracers) ### use q cal advection
+    ###
+    Add_Horizontal_Advection!(mesh, spe_tracers_c, grid_u, grid_v, grid_δtracers) ### use q cal advection
     Trans_Grid_To_Spherical!(mesh, grid_δtracers, spe_δtracers) # but add tendency on to q'
     Compute_Spectral_Damping!(integrator, spe_tracers_c, spe_tracers_p, spe_δtracers)
     Filtered_Leapfrog!(integrator, spe_δtracers, spe_tracers_p, spe_tracers_c, spe_tracers_n)
@@ -366,7 +383,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     ###
     Add_Horizontal_Advection!(mesh, spe_t_c, grid_u, grid_v, grid_δt)
     grid_tracers_diff_new = HS_forcing_water_vapor!(grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_t_eq_ref)
-    grid_tracers_diff .= grid_tracers_diff_new
+    grid_tracers_diff    .= grid_tracers_diff_new
     ### 10/30
     # @info maximum(grid_tracers_diff)
     ###
@@ -634,7 +651,7 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_t_p   .= grid_t
 
     # Tracer initialization
-    initial_RH      = 0.5
+    initial_RH      = 0.8
     Lv              = 2.5*10^6.
     Rv              = 461.
     ### 2023/10/25
@@ -642,9 +659,10 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     ###
     # grid_tracers_c .= read_file["grid_tracers_c_xyz1t"][:,:,:,initial_day]
     ###
+    """
     ### By 11/02
     ### original
-    # grid_δps .= 0.0
+    grid_δps .= 0.0
     ###
     
     grid_t_eq_ref .= zeros(size(grid_tracers_c)...)
@@ -655,18 +673,17 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_tracers_q    = zeros(size(grid_tracers_c)...)
     
     ### cal q(t)
-    grid_tracers_q .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) 
+    grid_tracers_q    .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) .* initial_RH)) 
     
     ### cal q_ref(teq)
     grid_tracers_ref0 .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) .* initial_RH)) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_eq_ref)) .* initial_RH)) 
     
     ### cal q_ref_final = q_ref * global(q) / global(q_ref)
     grid_tracers_ref .= grid_tracers_ref0 .* (Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_q, grid_ps) ./ Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_ref0, grid_ps))
-    
     ### cal q' = q - q_ref
     grid_tracers_c .= zeros(size(grid_tracers_c)...)
     # grid_tracers_c .= grid_tracers_q .- grid_tracers_ref
-    
+    """
     ### 11/01
     Trans_Grid_To_Spherical!(mesh, grid_tracers_ref, spe_tracers_ref)
     Trans_Spherical_To_Grid!(mesh, spe_tracers_ref, grid_tracers_ref)
@@ -735,17 +752,17 @@ function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Arr
     
     
     ### original
-    # grid_tracers_diff  .= max.(0.,grid_tracers_c.-grid_tracers_c_max)
+    grid_tracers_diff  .= max.(0.,grid_tracers_c.-grid_tracers_c_max)
     ###
     ### 10/31
-    grid_tracers_diff  .= max.(grid_tracers_c_max, grid_tracers_c .+ grid_tracers_t_eq_ref) .- grid_tracers_c_max ### 10/31
+    # grid_tracers_diff  .= max.(grid_tracers_c_max, grid_tracers_c .+ grid_tracers_t_eq_ref) .- grid_tracers_c_max ### 10/31
     ###
     
 
 
     # FIXME
     day_to_sec = 86400.
-    L = 0.3
+    L = 0.1
     ### 2023/10/28
     ### ice
     # Ls = 2.83 * 10^6.
