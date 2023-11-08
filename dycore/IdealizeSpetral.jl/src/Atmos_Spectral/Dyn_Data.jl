@@ -172,6 +172,8 @@ mutable struct Dyn_Data
 
     ### 11/07
     unsaturated_n::Array{Float64,3}
+    factor::Array{Float64,3}
+
     
 end
 
@@ -327,6 +329,9 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
     spe_tracers_ref = zeros(ComplexF64, num_fourier+1, num_spherical+1, nd)
     ### 11/07
     unsaturated_n = zeros(Float64, nλ,  nθ, nd)
+
+    factor = zeros(Float64, nλ,  nθ, nd)
+
     
     
     Dyn_Data(name, num_fourier, num_spherical, nλ, nθ, nd, num_grid_tracters, num_spe_tracters,
@@ -357,7 +362,7 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
     grid_z_full, grid_z_half,grid_t_eq,
     #########################################################################
     spe_d1, spe_d2, grid_d_full1, grid_d_full2, grid_d_half1, grid_d_half2,
-    spe_zeros, grid_t_eq_ref, grid_tracers_ref, spe_tracers_ref, unsaturated_n)
+    spe_zeros, grid_t_eq_ref, grid_tracers_ref, spe_tracers_ref, unsaturated_n, factor)
 end
 
 function Time_Advance!(dyn_data::Dyn_Data)

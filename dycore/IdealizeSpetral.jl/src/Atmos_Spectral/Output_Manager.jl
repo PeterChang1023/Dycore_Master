@@ -86,6 +86,9 @@ mutable struct Output_Manager
 
     ### 11/07
     unsaturated_n_xyzt::Array{Float64,4}
+
+    factor_xyzt::Array{Float64,4}
+
     
     
 end
@@ -172,13 +175,15 @@ function Output_Manager(mesh::Spectral_Spherical_Mesh, vert_coord::Vert_Coordina
 
     ### 11/07
     unsaturated_n_xyzt = zeros(Float64, nλ,  nθ, nd, n_day)  
+    factor_xyzt        = zeros(Float64, nλ,  nθ, nd, n_day)  
+
 
     Output_Manager(nλ, nθ, nd, n_day,
     day_to_sec, start_time, end_time, current_time, spinup_day,
     λc, θc, σc,
     t_daily_zonal_mean, t_eq_daily_zonal_mean, u_daily_zonal_mean, v_daily_zonal_mean, 
     ps_daily_mean, n_daily_mean, 
-    t_zonal_mean,t_eq_zonal_mean, u_zonal_mean, v_zonal_mean, ps_mean, grid_u_c_xyzt, grid_v_c_xyzt, grid_t_c_xyzt, grid_t_eq_xyzt, grid_geopots_xyzt, grid_ps_xyzt, spe_vor_c_xyzt, spe_div_c_xyzt, grid_lnps_xyzt, grid_p_half_xyzt, grid_Δp_xyzt,  grid_lnp_half_xyzt,  grid_p_full_xyzt, grid_lnp_full_xyzt, spe_lnps_c_xyzt, spe_lnps_p_xyzt, grid_tracers_n_xyz1t, grid_tracers_c_xyz1t, grid_tracers_p_xyz1t,  grid_tracers_diff_xyz1t, spe_tracers_n_xyz1t, spe_tracers_c_xyz1t, spe_tracers_p_xyz1t, grid_w_full_xyzt, grid_vor_c_xyzt, grid_δu_xyzt, grid_δv_xyzt, grid_δt_xyzt, grid_δps_xyzt, grid_t_eq_ref_xyzt, grid_z_full_xyzt, grid_z_half_xyzt, unsaturated_n_xyzt)
+    t_zonal_mean,t_eq_zonal_mean, u_zonal_mean, v_zonal_mean, ps_mean, grid_u_c_xyzt, grid_v_c_xyzt, grid_t_c_xyzt, grid_t_eq_xyzt, grid_geopots_xyzt, grid_ps_xyzt, spe_vor_c_xyzt, spe_div_c_xyzt, grid_lnps_xyzt, grid_p_half_xyzt, grid_Δp_xyzt,  grid_lnp_half_xyzt,  grid_p_full_xyzt, grid_lnp_full_xyzt, spe_lnps_c_xyzt, spe_lnps_p_xyzt, grid_tracers_n_xyz1t, grid_tracers_c_xyz1t, grid_tracers_p_xyz1t,  grid_tracers_diff_xyz1t, spe_tracers_n_xyz1t, spe_tracers_c_xyz1t, spe_tracers_p_xyz1t, grid_w_full_xyzt, grid_vor_c_xyzt, grid_δu_xyzt, grid_δv_xyzt, grid_δt_xyzt, grid_δps_xyzt, grid_t_eq_ref_xyzt, grid_z_full_xyzt, grid_z_half_xyzt, unsaturated_n_xyzt, factor_xyzt)
 end
 
 function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, current_time::Int64)
@@ -239,7 +244,7 @@ function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, curr
 
     ### 11/07
     unsaturated_n_xyzt = output_manager.unsaturated_n_xyzt
-
+    factor_xyzt = output_manager.factor_xyzt
     
     
     i_day = Int(div(current_time - start_time - 1, day_to_sec) + 1)
@@ -303,6 +308,7 @@ function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, curr
     ### 11/07
     unsaturated_n_xyzt[:,:,:,i_day] .= dyn_data.unsaturated_n[:,:,:]
     
+    factor_xyzt[:,:,:,i_day] .= dyn_data.factor[:,:,:]
     #print(maximum(grid_tracers_c_xyz1t))
     ###
     n_daily_mean[i_day] += 1
@@ -364,7 +370,7 @@ function Finalize_Output!(output_manager::Output_Manager, save_file_name::String
 
     ### 11/07
     unsaturated_n_xyzt = output_manager.unsaturated_n_xyzt
-    
+    factor_xyzt = output_manager.factor_xyzt
 
     for i_day = 1:n_day
         t_daily_zonal_mean[:,:,i_day] ./= n_daily_mean[i_day]
@@ -387,11 +393,11 @@ function Finalize_Output!(output_manager::Output_Manager, save_file_name::String
     ps_mean .= dropdims(mean(ps_daily_mean[:,:,spinup_day+1:n_day], dims=3), dims=3)
        
     if save_file_name != "None"
-        @save save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt
+        @save save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt factor_xyzt
     end
 
     if mean_save_file_name != "None"
-        @save mean_save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt
+        @save mean_save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt factor_xyzt
     end
 end
 

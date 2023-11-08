@@ -97,7 +97,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
 
         # grid_tracers_n[(grid_tracers_n .- grid_tracers_n_max) .<0] 
         factor .*= (mean_moisture_p-mean_moisture_n)/mean_factor_n
-        grid_tracers_n .+=  factor
+        grid_tracers_n[:,:,10:20] .+=  factor[:,:,10:20] ./  V[:,:,10:20]
 
         """ original
         grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
@@ -109,10 +109,8 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
-        
 
-
-
+        return factor
     end
     
 end 
@@ -306,7 +304,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     spe_tracers_ref  = dyn_data.spe_tracers_ref
     ### 11/01
     grid_t_eq_ref   = dyn_data.grid_t_eq_ref
-    
+    ### 
+    factor = dyn_data.factor
     
     ###
     # todo !!!!!!!!
@@ -470,7 +469,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     # @info "min grid_tracers_n" minimum(grid_tracers_n)
     # @info "min dyn.grid_tracers_c" minimum(dyn_data.grid_tracers_n)
 
-    Compute_Corrections!(vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
+    factor = Compute_Corrections!(vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
         grid_u_n, grid_v_n,
         grid_energy_full, grid_ps_p,grid_ps,
         grid_ps_n, spe_lnps_n, 
