@@ -126,9 +126,6 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
         
-
-
-
     end
     
 end 
