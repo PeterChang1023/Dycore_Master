@@ -78,12 +78,17 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
         grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
         
-        unsaturated_n  = zeros(size(grid_tracers_c)...)
+        surface_n  = zeros(size(grid_tracers_c)...)
+        factor  = zeros(size(grid_tracers_c)...)
+
         #unsaturated_n .= grid_tracers_n_max.-grid_tracers_n
-        unsaturated_n .= grid_tracers_n_max
-        #unsaturated_n[(grid_tracers_n .- grid_tracers_n_max) .==0] .= 0
-        mean_unsaturated_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, unsaturated_n, grid_ps_n)
-        #grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max) # take line79 to here
+        surface_n[:,:,10:20] .= grid_tracers_n_max[:,:,10:20]
+        # surface_n[(surface_n .- grid_tracers_n_max) .==0] .= 0
+        surface_n = min.(surface_n, grid_tracers_n_max)
+        V = zeros(((128,64,20)))
+        V[:,:,10:20] .= (grid_u_n[:,:,10:20].^2 .+ grid_v_n[:,:,10:20].^2).^0.5
+        factor[:,:,10:20] .= (grid_tracers_n_max[:,:,10:20] .- surface_n[:,:,10:20]) .* V[:,:,10:20]
+        mean_factor_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
 
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
@@ -91,8 +96,8 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         
 
         # grid_tracers_n[(grid_tracers_n .- grid_tracers_n_max) .<0] 
-        unsaturated_n .*= (mean_moisture_p-mean_moisture_n)/mean_unsaturated_n
-        grid_tracers_n .+=  unsaturated_n
+        factor .*= (mean_moisture_p-mean_moisture_n)/mean_factor_n
+        grid_tracers_n .+=  factor
 
         """ original
         grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
