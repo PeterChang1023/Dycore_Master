@@ -113,7 +113,6 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         mean_qv_flux_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max .* V_n, grid_ps_n) 
 
         @info mean_qv_flux_p,  mean_qv_flux_n
-
         # qv_flux_n_max        .*= (mean_qv_flux_p - mean_qv_flux_n)  /mean_qv_flux_max_n 
         # grid_tracers_n     .+=  qv_flux_n_max ./ V_n ./ grid_z_full #  miss timestep = 600sec
         qv_flux_n_max .*= (mean_qv_flux_p - mean_qv_flux_n)/mean_qv_flux_max_n 
