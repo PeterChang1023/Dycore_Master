@@ -33,8 +33,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
     grid_ps_n::Array{Float64, 3}, spe_lnps_n::Array{ComplexF64, 3}, 
     grid_t_n::Array{Float64, 3}, spe_t_n::Array{ComplexF64, 3},
     sum_tracers_p::Float64, grid_tracers_p::Array{Float64, 3}, grid_tracers_c::Array{Float64, 3}, grid_tracers_n::Array{Float64, 3}, 
-    grid_t::Array{Float64, 3}, 
-    grid_p_full::Array{Float64, 3})
+    grid_t::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_z_full::Array{Float64, 3}, grid_u_p::Array{Float64, 3}, grid_v_p::Array{Float64, 3})
 
 
     do_mass_correction, do_energy_correction, do_water_correction = atmo_data.do_mass_correction, atmo_data.do_energy_correction, atmo_data.do_water_correction
@@ -75,29 +74,52 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         #@info "max grid_tracers_c" maximum(grid_tracers_c)
         grid_tracers_n[grid_tracers_n .< 0] .= 0 
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
+        ### original
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
+        ###
         grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
         
-        unsaturated_n  = zeros(size(grid_tracers_c)...)
-        #unsaturated_n .= grid_tracers_n_max.-grid_tracers_n
-        unsaturated_n .= grid_tracers_n_max
-        #unsaturated_n[(grid_tracers_n .- grid_tracers_n_max) .==0] .= 0
-        mean_unsaturated_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, unsaturated_n, grid_ps_n)
-        #grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max) # take line79 to here
+        # unsaturated_n_all  = zeros((128,64))
+        # unsaturated_n .= grid_tracers_n_max.-grid_tracers_n
+        # unsaturated_n .= grid_tracers_n_max
+        # mean_unsaturated_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, unsaturated_n, grid_ps_n)
+        mean_unsaturated_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
 
+        # original
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
-        
+        @info mean_moisture_p,  mean_moisture_n
 
-        # grid_tracers_n[(grid_tracers_n .- grid_tracers_n_max) .<0] 
-        unsaturated_n .*= (mean_moisture_p-mean_moisture_n)/mean_unsaturated_n
-        grid_tracers_n .+=  unsaturated_n
+        # mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
+        #
 
-        """ original
-        grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
-        grid_tracers_n .+=  grid_tracers_n_max
-        """
+        ### 11/08
+        # mean_qv_flux_p = zeros(((128,64,20)))
+        # mean_qv_flux_n = zeros(((128,64,20)))
+        V_n  = zeros(((128,64,20)))
+        V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
+        V_p  = zeros(((128,64,20)))
+        V_p .= (grid_u_p[:,:,:].^2 .+ grid_v_p[:,:,:].^2).^0.5
+
+
+        qv_flux_n_max  = deepcopy(grid_tracers_n)
+        qv_flux_all    = deepcopy(grid_tracers_n)
+
+        qv_flux_n_max .= grid_tracers_n_max .* V_n #./ grid_z_full
+        qv_flux_all   .= grid_tracers_n     .* V_n #./ grid_z_full
+
+        mean_qv_flux_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p     .* V_p, grid_ps_p) 
+        mean_qv_flux_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n     .* V_n, grid_ps_n) 
+        mean_qv_flux_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max .* V_n, grid_ps_n) 
+
+        @info mean_qv_flux_p,  mean_qv_flux_n
+
+        # grid_tracers_n[:,:,:]  .+= unsaturated_n_all ./ (128*64)
+        # qv_flux_n_max        .*= (mean_qv_flux_p - mean_qv_flux_n)  /mean_qv_flux_max_n 
+        # grid_tracers_n     .+=  qv_flux_n_max ./ V_n ./ grid_z_full #  miss timestep = 600sec
+        qv_flux_n_max .*= (mean_qv_flux_p - mean_qv_flux_n)/mean_qv_flux_max_n 
+        grid_tracers_n     .+=  qv_flux_n_max ./ V_n #.* grid_z_full
+        # 
 
 #        grid_tracers_n .+=  mean_moisture_p/mean_moisture_n
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
@@ -301,7 +323,10 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     spe_tracers_ref  = dyn_data.spe_tracers_ref
     ### 11/01
     grid_t_eq_ref   = dyn_data.grid_t_eq_ref
-    
+    ### 11/07
+    grid_z_full = dyn_data.grid_z_full
+    grid_z_half = dyn_data.grid_z_half
+
     
     ###
     # todo !!!!!!!!
@@ -471,9 +496,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
         grid_ps_n, spe_lnps_n, 
         grid_t_n, spe_t_n, 
         sum_tracers_p, grid_tracers_p, grid_tracers_c, grid_tracers_n,
-        grid_t,
-        grid_p_full
-    )
+        grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p)
 
     ###
 

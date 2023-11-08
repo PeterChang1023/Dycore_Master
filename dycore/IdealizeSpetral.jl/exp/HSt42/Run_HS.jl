@@ -25,7 +25,9 @@ op_man = Atmos_Spectral_Dynamics_Main(physics_params, end_day, spinup_day)
 # Finalize_Output!(op_man, "100day_test_RH80_original_h_advection_final.dat", "100day_test_RH80_original_h_advection_all.dat")
 # Finalize_Output!(op_man, "day200_hope_test_final.dat", "day200_hope_test_all.dat")
 
-# Finalize_Output!(op_man, "day50_hope_test_final.dat", "day50_hope_test_all.dat")
+# Finalize_Output!(op_man, "day50_qv_v_test_final.dat", "day50_qv_v_test_all.dat")
+# Finalize_Output!(op_man, "day200_qv_v_test_final.dat", "day200_qv_v_test_all.dat")
+
 Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
 
 # Finalize_Output!(op_man, "day200_hope_test_final.dat", "day200_hope_test_all.dat")
