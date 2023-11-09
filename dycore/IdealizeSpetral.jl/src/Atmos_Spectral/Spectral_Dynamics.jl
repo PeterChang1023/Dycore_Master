@@ -82,12 +82,12 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         factor  = zeros(size(grid_tracers_c)...)
 
         #unsaturated_n .= grid_tracers_n_max.-grid_tracers_n
-        surface_n[:,:,10:20] .= grid_tracers_n_max[:,:,10:20]
+        surface_n[:,:,15:20] .= grid_tracers_n[:,:,15:20]
         # surface_n[(surface_n .- grid_tracers_n_max) .==0] .= 0
         surface_n = min.(surface_n, grid_tracers_n_max)
         V = zeros(((128,64,20)))
-        V[:,:,10:20] .= (grid_u_n[:,:,10:20].^2 .+ grid_v_n[:,:,10:20].^2).^0.5
-        factor[:,:,10:20] .= (grid_tracers_n_max[:,:,10:20] .- surface_n[:,:,10:20]) .* V[:,:,10:20]
+        V[:,:,15:20] .= (grid_u_n[:,:,15:20].^2 .+ grid_v_n[:,:,15:20].^2).^0.5
+        factor[:,:,15:20] .= (grid_tracers_n_max[:,:,15:20] .- surface_n[:,:,15:20]) .* V[:,:,15:20]
         mean_factor_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
 
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
@@ -96,13 +96,14 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         
 
         # grid_tracers_n[(grid_tracers_n .- grid_tracers_n_max) .<0] 
-        factor .*= (mean_moisture_p-mean_moisture_n)/mean_factor_n
-        grid_tracers_n[:,:,10:20] .+=  factor[:,:,10:20] ./  V[:,:,10:20]
+        factor         .*= (mean_moisture_p-mean_moisture_n)/mean_factor_n
+        # @info size(factor) size(V)
+        grid_tracers_n .+=  factor #./  V
 
-        """ original
-        grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
-        grid_tracers_n .+=  grid_tracers_n_max
-        """
+        ### original
+        # grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
+        # grid_tracers_n .+=  grid_tracers_n_max
+        ###
 
 #        grid_tracers_n .+=  mean_moisture_p/mean_moisture_n
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
@@ -469,7 +470,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     # @info "min grid_tracers_n" minimum(grid_tracers_n)
     # @info "min dyn.grid_tracers_c" minimum(dyn_data.grid_tracers_n)
 
-    factor = Compute_Corrections!(vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
+    factor_new = Compute_Corrections!(vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
         grid_u_n, grid_v_n,
         grid_energy_full, grid_ps_p,grid_ps,
         grid_ps_n, spe_lnps_n, 
@@ -478,7 +479,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
         grid_t,
         grid_p_full
     )
-
+    factor .= factor_new
+    @info maximum(factor)
     ###
 
     day_to_sec = 86400
