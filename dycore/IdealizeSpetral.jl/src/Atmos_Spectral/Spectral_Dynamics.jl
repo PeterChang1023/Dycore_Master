@@ -26,7 +26,7 @@ function Compute_Corrections_Init(vert_coord::Vert_Coordinate, mesh::Spectral_Sp
     return mean_ps_p, mean_energy_p, sum_tracers_p
 end 
 
-function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
+function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::Vert_Coordinate, mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
     mean_ps_p::Float64, mean_energy_p::Float64, 
     grid_u_n::Array{Float64, 3}, grid_v_n::Array{Float64, 3},
     grid_energy_temp::Array{Float64, 3}, grid_ps_p::Array{Float64, 3},grid_ps_c::Array{Float64, 3},
@@ -34,7 +34,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
     grid_t_n::Array{Float64, 3}, spe_t_n::Array{ComplexF64, 3},
     sum_tracers_p::Float64, grid_tracers_p::Array{Float64, 3}, grid_tracers_c::Array{Float64, 3}, grid_tracers_n::Array{Float64, 3}, 
     grid_t::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_z_full::Array{Float64, 3}, grid_u_p::Array{Float64, 3}, grid_v_p::Array{Float64, 3},
-    grid_geopots::Array{Float64, 3})
+    grid_geopots::Array{Float64, 3}, grid_w_full::Array{Float64,3})
 
 
     do_mass_correction, do_energy_correction, do_water_correction = atmo_data.do_mass_correction, atmo_data.do_energy_correction, atmo_data.do_water_correction
@@ -104,39 +104,41 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         ###
         z = zeros(((128,64,20)))
         z_a = zeros((128,64))
-        for i in 1:19
-            z[:,:,i] .=  287 .* mean(grid_t_n[:,:,1:i+1], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,i+1])
-        z[:,:,1 ] .=  287 .* mean(grid_t_n[:,:,1], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,2])
-        z[:,:,20] .=  287 .* mean(grid_t_n[:,:,1:20], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,20])
+        # for i in 1:19
+            # z[:,:,i] .=  287 .* mean(grid_t_n[:,:,1:i+1], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,i+1]) ./2
+        # z[:,:,1 ] .=  287 .* mean(grid_t_n[:,:,1], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,2]) ./2
+        T_v_a = zeros((128,64))
+        T_v_a .= grid_t[:,:,20] .* (1 .+ 0.608 .* grid_tracers_c[:,:,20])
+        z[:,:,20] .=  287 .* T_v_a ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,20]) ./2
 
         z_a .= z[:,:,20]
-        end
+        # end
+        integrator = semi_implicit.integrator
+        Δt = Get_Δt(integrator)
         ### add moisture at surface
-        qv_flux_n_max2[:,:,1] .=  V_n[:,:,20] .* 600   .* (grid_tracers_n_max[:,:,20] - grid_tracers_n[:,:,20]) ./ z[:,:,20] # grid_tracers_n_max .*
-        grid_tracers_n[:,:,20]     .+=  qv_flux_n_max2[:,:,1] .* 0.0044  
-        """
-        # grid_tracers_p_up     = zeros(((128,64,20)))
-        # grid_tracers_n_up     = zeros(((128,64,20)))
-        # grid_tracers_n_max_up = zeros(((128,64,20)))
-        # grid_tracers_p_up[:,:,1:19] .= grid_tracers_p[:,:,1:19]
-        # grid_tracers_n_up[:,:,1:19] .= grid_tracers_n[:,:,1:19]
-        # grid_tracers_n_max_up[:,:,1:19] .= grid_tracers_n_max[:,:,1:19]
+        ### ∂q_a/∂t = C_E * V_a * (q_sat,a - q_a) ./ z_a 
+        C_E = 0.0044
+        qv_flux_n_max2[:,:, 1] .=  C_E .* V_n[:,:,20] .*  Δt  .* (grid_tracers_n_max[:,:,20] - grid_tracers_n[:,:,20]) ./ z_a # grid_tracers_n_max .*
+        grid_tracers_n[:,:,20] .=  grid_tracers_p[:,:,20] .+ qv_flux_n_max2[:,:,1]  
 
-        # mean_moisture_p_up     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p_up, grid_ps_p)
-        # mean_moisture_n_up     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_up, grid_ps_n)
-        # mean_moisture_max_n_up =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max_up, grid_ps_n)
-
-        # grid_tracers_n_max_up .*= (mean_moisture_p_up-mean_moisture_n_up)/mean_moisture_max_n_up
-        # grid_tracers_n     .+=  grid_tracers_n_max_up
-        """
-        # eddy diffusivity coefficient, K_E
+        ### eddy diffusivity coefficient, K_E
         K_E = zeros(((128,64,20)))
         V_a = V_n[:,:,20]
 
-        K_E[:,:,15:20] .= 0.0044 .* V_a .* z_a
-        K_E[:,:, 1:14] .= 0.0044 .* V_a .* z_a .* exp.(-((grid_p_full[:,:,15] .- grid_p_full[:,:,1:14]) ./ 10000).^2)
-        # make \bar{w'q'}
-        # eddy_wq = zeros(((128,64,20)))
+        K_E[:,:,15:20] .= C_E .* V_a .* z_a
+        K_E[:,:, 1:14] .= C_E .* V_a .* z_a .* exp.(-((grid_p_full[:,:,15] .- grid_p_full[:,:,1:14]) ./ 10000).^2)
+        ### make \overbar{w'q'}
+        ### According to "Idealized Tropical Cyclone Simulations of Intermediate Complexity: A Test Case for Atmospheric GCMs",
+        ### w' mean vertical wind deviation from time mean, overbar mean time average
+        eddy_wq = zeros(((128,64,20)))
+        eddy_w, eddy_q = zeros(((128,64,20))), zeros(((128,64,20)))
+
+        eddy_w .= grid_w_full .- mean(grid_w_full)
+        eddy_w .= grid_tracers_n .- mean(grid_tracers_n)
+        
+        eddy_wq .= eddy_w .* eddy_q # no time average, because eddy_wq mean this timestep mean
+        # \overbar{w'q'} = -K_e * ∂q/∂t
+        grid_tracers_n .= grid_tracers_p .+ (-eddy_wq) ./ K_E .* Δt
 
 
 #        grid_tracers_n .+=  mean_moisture_p/mean_moisture_n
@@ -144,7 +146,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
-        
+        return (-eddy_wq) ./ K_E .* Δt, qv_flux_n_max2[:,:,1] 
     end
     
 end 
@@ -341,8 +343,10 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     ### 11/07
     grid_z_full = dyn_data.grid_z_full
     grid_z_half = dyn_data.grid_z_half
-
-    
+    ###
+    grid_w_full = dyn_data.grid_w_full
+    ### 
+    add_water = dyn_data.add_water
     ###
     # todo !!!!!!!!
     #  grid_q = grid_t
@@ -422,7 +426,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
    
     ###
     Add_Horizontal_Advection!(mesh, spe_t_c, grid_u, grid_v, grid_δt)
-    grid_tracers_diff_new = HS_forcing_water_vapor!(grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_t_eq_ref)
+    grid_tracers_diff_new = HS_forcing_water_vapor!(grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_u, grid_v)
     grid_tracers_diff    .= grid_tracers_diff_new
     ### 10/30
     # @info maximum(grid_tracers_diff)
@@ -505,13 +509,16 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     # @info "min grid_tracers_n" minimum(grid_tracers_n)
     # @info "min dyn.grid_tracers_c" minimum(dyn_data.grid_tracers_n)
 
-    Compute_Corrections!(vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
+    up, down = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
         grid_u_n, grid_v_n,
         grid_energy_full, grid_ps_p,grid_ps,
         grid_ps_n, spe_lnps_n, 
         grid_t_n, spe_t_n, 
         sum_tracers_p, grid_tracers_p, grid_tracers_c, grid_tracers_n,
-        grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p, grid_geopots)
+        grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p, grid_geopots, grid_w_full)
+
+    add_water[:,:,:]    .= up
+    add_water[:,:,20]   .= down
 
     ###
 
@@ -577,10 +584,10 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_p_half, grid_p_full = dyn_data.grid_p_half, dyn_data.grid_p_full
     # grid_t_eq = dyn_data.grid_t_eq
     
-    grid_t_eq_ref   = dyn_data.grid_t_eq_ref
-    grid_tracers_ref = dyn_data.grid_tracers_ref
+    # grid_t_eq_ref   = dyn_data.grid_t_eq_ref
+    # grid_tracers_ref = dyn_data.grid_tracers_ref
     ###
-    spe_tracers_ref = dyn_data.spe_tracers_ref
+    # spe_tracers_ref = dyn_data.spe_tracers_ref
     ### 11/08
     grid_z_full = dyn_data.grid_z_full
     
@@ -728,8 +735,8 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     # grid_tracers_c .= grid_tracers_q .- grid_tracers_ref
     """
     ### 11/01
-    Trans_Grid_To_Spherical!(mesh, grid_tracers_ref, spe_tracers_ref)
-    Trans_Spherical_To_Grid!(mesh, spe_tracers_ref, grid_tracers_ref)
+    # Trans_Grid_To_Spherical!(mesh, grid_tracers_ref, spe_tracers_ref)
+    # Trans_Spherical_To_Grid!(mesh, spe_tracers_ref, grid_tracers_ref)
     
     ###
     Trans_Grid_To_Spherical!(mesh, grid_tracers_c, spe_tracers_c)
@@ -780,14 +787,16 @@ function Atmosphere_Update!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
 end 
 
 
-function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_t_eq_ref::Array{Float64, 3})######### 10/30
+function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_u::Array{Float64, 3},  grid_v::Array{Float64, 3})
 
     cp  = 1004.
     Lv = 2.5*10^6.
+    Rd = 287.04
     Rv = 461.
+    C_E = 0.0044
     grid_tracers_diff      = zeros(size(grid_tracers_c)...)
     grid_tracers_c_max     = zeros(size(grid_tracers_c)...)
-    grid_tracers_t_eq_ref  = zeros(size(grid_tracers_c)...)
+    # grid_tracers_t_eq_ref  = zeros(size(grid_tracers_c)...)
     
     grid_tracers_c_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t)) )) ######### 10/30 cc equation should use q'+q_ref
     
@@ -830,8 +839,23 @@ function HS_forcing_water_vapor!(grid_tracers_c::Array{Float64, 3},  grid_t::Arr
     ###
     ### only water condense
     grid_δt  .+= (grid_tracers_diff  .* Lv ./ cp)./day_to_sec .* L
+    @info maximum(grid_δt)
+
     ###
- 
+    
+    ### latent heat E = rho_a * L * C_E * V_a * (q_sat,s - q_a)
+    # make rho
+    # rho = zeros(((128,64,20)))
+    rho_a = zeros(((128,64,20)))
+    rho_a .= grid_p_full[:,:,20] ./ Rd ./ grid_t[:,:,20]
+    # make v_a
+    V_a  = zeros(((128,64,20)))
+    V_a[:,:,20] .= (grid_u[:,:,20].^2 .+ grid_v[:,:,20].^2).^0.5
+    # make q_sat,s
+    grid_tracers_c_max_surface = zeros(((128,64,20)))
+    grid_tracers_c_max_surface[:,:,20] .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) ./ (grid_p_full[:,:,20] .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) 
+    # finally make E
+    # grid_δt  .+= rho_a .* Lv .* C_E .* V_a .* (grid_tracers_c_max_surface .- grid_tracers_c[:,:,20]) ./ day_to_sec
     # @info maximum((grid_tracers_diff .* Lv ./ cp))
     
     return grid_tracers_diff
