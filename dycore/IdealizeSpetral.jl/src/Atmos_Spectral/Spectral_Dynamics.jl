@@ -134,7 +134,7 @@ function Compute_Corrections!(vert_coord::Vert_Coordinate, mesh::Spectral_Spheri
         V_a = V_n[:,:,20]
 
         K_E[:,:,15:20] .= 0.0044 .* V_a .* z_a
-        K_E[:,:, 1:14] .= 0.0055 .* V_a .* z_a .* exp.(-((grid_p_full[:,:,15] .- grid_p_full[:,:,1:14]) ./ 10000).^2)
+        K_E[:,:, 1:14] .= 0.0044 .* V_a .* z_a .* exp.(-((grid_p_full[:,:,15] .- grid_p_full[:,:,1:14]) ./ 10000).^2)
         # make \bar{w'q'}
         # eddy_wq = zeros(((128,64,20)))
 
