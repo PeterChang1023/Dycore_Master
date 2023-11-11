@@ -103,6 +103,8 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
 
         V_n  = zeros(((128,64,20)))
         V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
+        V_p  = zeros(((128,64,20)))
+        V_p .= (grid_u_p[:,:,:].^2 .+ grid_v_p[:,:,:].^2).^0.5
         ###
         T_v_a = zeros((128,64))
         T_v_a .= grid_t[:,:,20] .* (1 .+ 0.608 .* grid_tracers_c[:,:,20])
@@ -120,9 +122,11 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### add moisture at surface
         ### ∂q_a/∂t = C_E * V_a * (q_sat,a - q_a) ./ z_a 
         C_E = 0.0044
-        qv_flux_p_max2 = zeros((128,64))
-        qv_flux_p_max2[:,:] .=  C_E .* V_n[:,:,20]  .* (grid_tracers_p_max[:,:,20] - grid_tracers_p[:,:,20]) ./ z_a # grid_tracers_n_max .*
-        grid_tracers_n[:,:,20] .=  grid_tracers_p[:,:,20] .+ qv_flux_p_max2[:,:] .*  2*Δt 
+        factor       = zeros((128,64))
+        factor_final = zeros((128,64))
+        factor[:,:] .=  C_E .* V_p[:,:,20]  .* (grid_tracers_p_max[:,:,20] - grid_tracers_p[:,:,20]) ./ z_a # grid_tracers_n_max .*
+        factor_final .= min.(0, factor)
+        grid_tracers_n[:,:,20] .=  grid_tracers_p[:,:,20] .+ factor_final[:,:] .*  2*Δt 
         
         ### eddy diffusivity coefficient, K_E
         K_E = zeros(((128,64,20)))
@@ -137,8 +141,8 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         eddy_wq = zeros(((128,64,20)))
         eddy_w, eddy_q = zeros(((128,64,20))), zeros(((128,64,20)))
 
-        eddy_w .= -grid_w_full    #.- (-grid_w_full) ./ (Δt) 
-        eddy_q .= grid_tracers_p #.- (grid_tracers_p) ./ (Δt) 
+        eddy_w .= grid_w_full    .- (grid_w_full) ./ (Δt) 
+        eddy_q .= grid_tracers_p  .- (grid_tracers_p) ./ (Δt) 
         
         eddy_wq .= eddy_w .* eddy_q ./ (Δt)     # time average, because eddy_wq mean this timestep mean
         @info maximum(eddy_wq)
@@ -159,7 +163,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
-        return (-eddy_wq) ./ K_E .* Δt, qv_flux_p_max2[:,:,1] 
+        return (-eddy_wq) ./ K_E .* Δt, factor_final[:,:] 
     end
     
 end 
