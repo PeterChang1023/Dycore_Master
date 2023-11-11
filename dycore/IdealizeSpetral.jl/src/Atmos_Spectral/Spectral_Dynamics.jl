@@ -82,9 +82,9 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ###
         # condense ∂q/∂t = -C
         # condense move to main code, grid_∂tracers
-        # grid_tracers_diff  .= min.(0, grid_tracers_c .- grid_tracers_c_max) ./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) ./ (2*Δt)
-
-        # grid_tracers_n .= grid_tracers_p .+ -grid_tracers_diff * (2*Δt)
+        # grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) ./ (2*Δt)
+        grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
+        # grid_tracers_n .= grid_tracers_p .- grid_tracers_diff * (2*Δt)
 
         # grid_tracers_p_max  = deepcopy(grid_tracers_p)
         # grid_tracers_p_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_p)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_p)) )) 
@@ -99,12 +99,12 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         # @info mean_moisture_p,  mean_moisture_n
-
+        ### beacuse wannt add on the surface
+        grid_tracers_n_max[:,:,1:19] .= 0.
         mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
         ### original add water
-        grid_tracers_n_max[:,:,1:19] .= 0.
-        grid_tracers_n_max[:,:,20] .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
-        grid_tracers_n[:,:,20]     .+=  grid_tracers_n_max[:,:,20]
+        grid_tracers_n_max .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
+        grid_tracers_n     .+=  grid_tracers_n_max
         ##################################################################################################################
         ### 11/08
         V_n  = zeros(((128,64,20)))
@@ -142,17 +142,19 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### make \overbar{w'q'}
         ### According to "Idealized Tropical Cyclone Simulations of Intermediate Complexity: A Test Case for Atmospheric GCMs",
         ### w' mean vertical wind deviation from time mean, overbar mean time average
-        eddy_wq = zeros(((128,64,20)))
-        eddy_w, eddy_q = zeros(((128,64,20))), zeros(((128,64,20)))
 
+        eddy_wq = zeros(((128,64,20)))
+        # eddy_w, eddy_q = zeros(((128,64,20))), zeros(((128,64,20)))
         ### FIXME
-        eddy_w .= grid_w_full     .- (grid_w_full) ./ (Δt)   ### should be -w ???
-        eddy_q .= grid_tracers_p  .- (grid_tracers_p) ./ (Δt) 
-        
-        eddy_wq .= eddy_w .* eddy_q ./ (Δt)     # time average, because eddy_wq mean this timestep mean
+        # paper eq(22)
+        # C_E for For both evaporation and sensible heat the bulk coefficient
+        # is set to a constant, C_E and C_H = 0.0011, as suggested by Garratt [1992], Hasse and Smith [1997], and Smith and Vogl [2008] for ocean surfaces.
+        # (\overbar{w'q'})_s = C_E * V_a * (q_sat,s - q_a)      eq(22)
+        C_E_bf = 0.0011        
+        eddy_wq[:,:,20] .= C_E_bf .* V_a .* (grid_tracers_n_max[:,:,20] .- grid_tracers_n[:,:,20])   
         # \overbar{w'q'} = -K_e * ∂q/∂z
         for i in 19:1
-            grid_tracers_n[:,:,i] .= grid_tracers_n[:,:,i+1] .+ (-eddy_wq[:,:,i+1]) ./ K_E[:,:,i+1] .* (z[:,:,i] - z[:,:,i+1])
+            grid_tracers_n[:,:,i] .= grid_tracers_n[:,:,i+1] .+ (-eddy_wq[:,:,20]) ./ K_E[:,:,i+1] .* (z[:,:,i] - z[:,:,i+1])
         end
         
         # grid_tracers_n[:,:, 2] .= grid_tracers_n[:,:, 1] .+ (-eddy_wq[:,:, 1]) ./ K_E[:,:, 1] .* (z[:,:, 2] - z[:,:, 1])
@@ -165,7 +167,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
-        return grid_tracers_n_max[:,:,20]
+        return grid_tracers_n_max
     end
     
 end 
@@ -536,7 +538,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
         sum_tracers_p, grid_tracers_p, grid_tracers_c, grid_tracers_n,
         grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p, grid_geopots, grid_w_full, grid_t_p,  grid_tracers_diff)
 
-    add_water[:,:,20]   .= down
+    add_water[:,:,:]   .= down
 
     ###
 
@@ -863,7 +865,8 @@ function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_trace
     grid_tracers_c_max_surface = zeros((128,64))
     grid_tracers_c_max_surface[:,:] .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) ./ (grid_p_full[:,:,20] .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) 
     # finally make E
-    # grid_δt[:,:,20]  .+= rho_a .* Lv .* C_E .* V_a .* (grid_tracers_c_max_surface .- grid_tracers_c[:,:,20]) ./ day_to_sec # 
+    # grid_δt[:,:,20]  .+= rho_a .* Lv .* C_E .* V_a .* (grid_tracers_c_max_surface .- grid_tracers_c[:,:,20]) ./ day_to_sec #
+    grid_δt  .+= (grid_tracers_diff .* Lv ./ cp)./day_to_sec .* L 
     # @info maximum((grid_tracers_diff .* Lv ./ cp))
     # @info maximum(grid_δt)
     
