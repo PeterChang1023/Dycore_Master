@@ -20,6 +20,7 @@ function Compute_Corrections_Init(vert_coord::Vert_Coordinate, mesh::Spectral_Sp
         cp_air, grav = atmo_data.cp_air, atmo_data.grav
         grid_energy_temp  .=  0.5*((grid_u_p + Δt*grid_δu).^2 + (grid_v_p + Δt*grid_δv).^2) + cp_air*(grid_t_p + Δt*grid_δt)
         mean_energy_p = Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_energy_temp, grid_ps_p)
+        ###
     end
     
     
@@ -34,7 +35,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     grid_t_n::Array{Float64, 3}, spe_t_n::Array{ComplexF64, 3},
     sum_tracers_p::Float64, grid_tracers_p::Array{Float64, 3}, grid_tracers_c::Array{Float64, 3}, grid_tracers_n::Array{Float64, 3}, 
     grid_t::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_z_full::Array{Float64, 3}, grid_u_p::Array{Float64, 3}, grid_v_p::Array{Float64, 3},
-    grid_geopots::Array{Float64, 3}, grid_w_full::Array{Float64,3}, grid_t_p::Array{Float64, 3}, dyn_data::Dyn_Data)#,  grid_tracers_diff::Array{Float64, 3})
+    grid_geopots::Array{Float64, 3}, grid_w_full::Array{Float64,3}, grid_t_p::Array{Float64, 3}, dyn_data::Dyn_Data, grid_δt::Array{Float64,3})#,  grid_tracers_diff::Array{Float64, 3})
 
 
     do_mass_correction, do_energy_correction, do_water_correction = atmo_data.do_mass_correction, atmo_data.do_energy_correction, atmo_data.do_water_correction
@@ -59,6 +60,19 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         grid_t_n       .+= temperature_correction
         spe_t_n[1,1,:] .+= temperature_correction
 
+        ### 11/13
+        θc, λc = mesh.θc,  mesh.λc
+        grid_z_full = dyn_data.grid_z_full
+        Ts  = zeros(((128,64,1)))
+        for i in 1:128
+            Ts[i,:,1] .= 29 .* exp.(-θc.^2 ./ (2 * (26 .* pi ./180).^2)) .+ 271
+        end
+        # ∂T_a/∂t = C_E * V_a * (T_s - T_a) ./ z_a 
+        C_E = 0.0044
+        V_n  = zeros(((128,64,20)))
+        V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
+        V_a = V_n[:,:,20]
+        grid_δt[:,:,20] .+= C_E .* V_a .* (Ts[:,:,1] .- grid_t_n[:,:,20]) ./ grid_z_full[:,:,20]
     end
 
     # @info mean_ps_p, mean_energy_p, mass_correction_factor, temperature_correction
@@ -76,7 +90,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         factor2 = dyn_data.factor2
         grid_z_full = dyn_data.grid_z_full
         grid_z_half = dyn_data.grid_z_half
-
+        grid_δtracers = dyn_data.grid_δtracers 
 
         K_E = dyn_data.K_E
         pqpz = dyn_data.pqpz
@@ -85,6 +99,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         Lv = 2.5*10^6.
         Rv = 461.
         Rd = 287.
+        cp = 1004.
         #@info "max grid_tracers_c" maximum(grid_tracers_c)
         grid_tracers_n[grid_tracers_n .< 0] .= 0 
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
@@ -93,8 +108,12 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # condense ∂q/∂t = -C
         # condense move to main code, grid_∂tracers
         # grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) ./ (2*Δt)
+        ############# original ############
         grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
-
+        ###################################
+        # grid_tracers_n .= grid_tracers_p .- max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2)
+        # @info maximum(max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2))
+        # grid_δtracers .-= max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2)
         # grid_tracers_n .= grid_tracers_p .- grid_tracers_diff * (2*Δt)
         
 
@@ -154,10 +173,10 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # cal ∂q/∂z
         pqpz = zeros(((128,64,20)))
         for i in 2:19
-            pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+            pqpz[:,:,i] .=  (grid_tracers_c[:,:,i+1] .- grid_tracers_c[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
+        pqpz[:,:, 1] .=  (grid_tracers_c[:,:,2] .- grid_tracers_c[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        pqpz[:,:,20] .=  (grid_tracers_c[:,:,20] .- grid_tracers_c[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
         # for i in 2:19
         #     pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_half[:,:,i+1] .- grid_z_half[:,:,i-1]) 
         # end
@@ -607,7 +626,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
         grid_ps_n, spe_lnps_n, 
         grid_t_n, spe_t_n, 
         sum_tracers_p, grid_tracers_p, grid_tracers_c, grid_tracers_n,
-        grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p, grid_geopots, grid_w_full, grid_t_p, dyn_data)#,  grid_tracers_diff)
+        grid_t, grid_p_full, grid_z_full, grid_u_p, grid_v_p, grid_geopots, grid_w_full, grid_t_p, dyn_data, grid_δt)#,  grid_tracers_diff)
 
     # add_water[:,:,20]   .= down
     factor1 .= factor1_loc
@@ -932,7 +951,7 @@ function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_trace
     # @info maximum(grid_δt)
 
     ### let grid_tracers_diff be the C (condensation rate)
-    grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) ./ (2*Δt)
+    grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) #./ (2*Δt)
     # @info maximum(grid_tracers_diff)
     ### latent heat E = rho_a * L * C_E * V_a * (q_sat,s - q_a)
     # make rho
