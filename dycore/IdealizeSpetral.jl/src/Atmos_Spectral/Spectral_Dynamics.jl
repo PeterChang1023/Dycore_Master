@@ -60,23 +60,22 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         grid_t_n       .+= temperature_correction
         spe_t_n[1,1,:] .+= temperature_correction
 
-        ### 11/13
-        θc, λc = mesh.θc,  mesh.λc
-        grid_z_full = dyn_data.grid_z_full
-        Ts  = zeros(((128,64,1)))
-        for i in 1:128
-            Ts[i,:,1] .= 29 .* exp.(-θc.^2 ./ (2 * (26 .* pi ./180).^2)) .+ 271
-        end
-        # ∂T_a/∂t = C_E * V_a * (T_s - T_a) ./ z_a 
-        C_E = 0.0044
-        V_n  = zeros(((128,64,20)))
-        V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
-        V_a = V_n[:,:,20]
-        grid_δt[:,:,20] .+= C_E .* V_a .* (Ts[:,:,1] .- grid_t_n[:,:,20]) ./ grid_z_full[:,:,20]
+        # ### 11/13
+        # θc, λc = mesh.θc,  mesh.λc
+        # grid_z_full = dyn_data.grid_z_full
+        # Ts  = zeros(((128,64,1)))
+        # for i in 1:128
+        #     Ts[i,:,1] .= 29 .* exp.(-θc.^2 ./ (2 * (26 .* pi ./180).^2)) .+ 271
+        # end
+        # # ∂T_a/∂t = C_E * V_a * (T_s - T_a) ./ z_a 
+        # C_E = 0.0044
+        # V_n  = zeros(((128,64,20)))
+        # V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
+        # V_a = V_n[:,:,20]
+        # grid_δt[:,:,20] .+= C_E .* V_a .* (Ts[:,:,1] .- grid_t_n[:,:,20]) ./ grid_z_full[:,:,20]
     end
 
     # @info mean_ps_p, mean_energy_p, mass_correction_factor, temperature_correction
-    # error(6868)
     ### By CJY 0517
     nλ = mesh.nλ
     nθ = mesh.nθ
@@ -105,63 +104,30 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
         ###
-        # condense ∂q/∂t = -C
-        # condense move to main code, grid_∂tracers
-        # grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) ./ (2*Δt)
         ############# original ############
         grid_tracers_n .= min.(grid_tracers_n, grid_tracers_n_max)
-        ###################################
-        # grid_tracers_n .= grid_tracers_p .- max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2)
-        # @info maximum(max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2))
-        # grid_δtracers .-= max.(0, grid_tracers_n .- grid_tracers_n_max) ./ (1. .+ Lv / cp .* Lv .* grid_tracers_n_max ./ Rv ./ grid_t .^2)
-        # grid_tracers_n .= grid_tracers_p .- grid_tracers_diff * (2*Δt)
-        
-
         # original
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        # @info mean_moisture_p,  mean_moisture_n
-        # ### beacuse wannt add on the surface
-        # grid_tracers_n_max_for_weight = zeros(((128,64,20)))
-        # grid_tracers_n_max_for_weight[:,:,20] .= grid_tracers_n_max[:,:,20]
-        # mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max_for_weight, grid_ps_n)
-        ### original add water
-        # grid_tracers_n_max_for_weight .*= (mean_moisture_p-mean_moisture_n)/mean_moisture_max_n 
-        # grid_tracers_n     .+=  grid_tracers_n_max_for_weight
-        ##################################################################################################################
         ### 11/08
         V_n  = zeros(((128,64,20)))
         V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
-        # V_p  = zeros(((128,64,20)))
-        # V_p .= (grid_u_p[:,:,:].^2 .+ grid_v_p[:,:,:].^2).^0.5
         ###
         T_v_a = zeros((128,64))
         T_v_a .= grid_t[:,:,20] .* (1 .+ 0.608 .* grid_tracers_c[:,:,20])
         z = zeros(((128,64,20)))
         z_a = zeros((128,64))
-        # for i in 2:19
-        #     z[:,:,i] .=  287.04 .* mean(grid_t[:,:,20:-1:i], dims=3) ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,i]) 
-        # end
-        # z[:,:,1 ] .=  287.04 .* mean(grid_t[:,:,20:-1:1], dims=3)  ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,1]) 
-        # z[:,:,20] .=  287.04 .* T_v_a ./9.81 .* log.(grid_ps_n[:,:,1] ./ grid_p_full[:,:,20]) ./2
 
         z_a .= grid_z_full[:,:,20]
-        ########################################################################################################
-        ### add moisture at surface
-        ### following paper
+        ### add moisture at surface following paper
         ### ∂q_a/∂t = C_E * V_a * (q_sat,a - q_a) ./ z_a 
         ### factor1
         surface_n  = zeros(size(grid_tracers_c)...)
         surface_n[:,:,20] .= grid_tracers_n[:,:,20]
-        # surface_n[(surface_n .- grid_tracers_n_max) .==0] .= 0
         surface_n = min.(surface_n, grid_tracers_n_max)
-        # V = zeros(((128,64,20)))
-        # V[:,:,:] .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
-        factor1[:,:,20] .= C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- surface_n[:,:,20]) ./ z_a[:,:]
-
+        factor1[:,:,20] .= C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- grid_tracers_n[:,:,20]) ./ z_a[:,:]
         ### factor2
         # eddy diffusivity coefficient, K_E
-        # K_E = zeros(((128,64,20)))
         V_a = V_n[:,:,20]
         for i in 15:20
             K_E[:,:,i] .= C_E .* V_a .* z_a
@@ -173,72 +139,60 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # cal ∂q/∂z
         pqpz = zeros(((128,64,20)))
         for i in 2:19
-            pqpz[:,:,i] .=  (grid_tracers_c[:,:,i+1] .- grid_tracers_c[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+            pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_half[:,:,i+1] .- grid_z_half[:,:,i-1]) 
         end
-        pqpz[:,:, 1] .=  (grid_tracers_c[:,:,2] .- grid_tracers_c[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        pqpz[:,:,20] .=  (grid_tracers_c[:,:,20] .- grid_tracers_c[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        # for i in 2:19
-        #     pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_half[:,:,i+1] .- grid_z_half[:,:,i-1]) 
-        # end
-        # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_half[:,:,2] .- grid_z_half[:,:,1])
-        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_half[:,:,20] .- grid_z_half[:,:,19])
-        # @info maximum(grid_z_full)
-        # @info minimum(grid_z_full)
+        # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
         # cal rho
         rho = zeros(((128,64,20)))
         for i in 1:20
             rho[:,:,i] .=  grid_p_full[:,:,i] ./ Rd ./ (grid_t[:,:,i])#.+ grid_t[:,:,i-1])
         end
-        # rho[:,:,1]  .=  grid_p_full[:,:,1] ./ Rd ./ (grid_t[:,:,2] .+ grid_t[:,:,1])
-        # rho[:,:,20] .=  grid_p_full[:,:,20] ./ Rd ./ (grid_t[:,:,20] .+ grid_t[:,:,19])
-        # @info maximum(rho)
         # let all = rho * K_E * ∂q/∂z
-        all = zeros(((128,64,20)))
-        all .= rho .* K_E .* pqpz
+        all    = zeros(((128,64,20)))
+        all   .= rho .* K_E .* pqpz
         pallpz = zeros(((128,64,20)))
         for i in 2:19
             pallpz[:,:,i] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1])
         end
         pallpz[:,:,1]  .= (all[:,:,2] .- all[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         pallpz[:,:,20] .= (all[:,:,20] .- all[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_1 = zeros(((128,64,20)))
-        factor2_2 = zeros(((128,64,20)))
-        factor2_3 = zeros(((128,64,20)))
+        factor2 .= pallpz ./ rho
+        """
+        ### factor2 another try
+        # factor2_1 = zeros(((128,64,20)))
+        # factor2_2 = zeros(((128,64,20)))
+        # factor2_3 = zeros(((128,64,20)))
 
-        prhopz = zeros(((128,64,20)))
-        for i in 2:19
-            prhopz[:,:,i] .= (rho[:,:,i+1] .- rho[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
-        end
-        prhopz[:,:,1] .= (rho[:,:,2] .- rho[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        prhopz[:,:,20] .= (rho[:,:,20] .- rho[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_1 .= prhopz .* K_E .* pqpz ./ rho
+        # prhopz = zeros(((128,64,20)))
+        # for i in 2:19
+        #     prhopz[:,:,i] .= (rho[:,:,i+1] .- rho[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        # end
+        # prhopz[:,:,1] .= (rho[:,:,2] .- rho[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # prhopz[:,:,20] .= (rho[:,:,20] .- rho[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
+        # factor2_1 .= prhopz .* K_E .* pqpz ./ rho
 
-        pK_Epz = zeros(((128,64,20)))
-        for i in 2:19
-            pK_Epz[:,:,i] .= (K_E[:,:,i+1] .- K_E[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
-        end
-        pK_Epz[:,:,1] .=  (K_E[:,:,2]  .- K_E[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        pK_Epz[:,:,20] .= (K_E[:,:,20] .- K_E[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_2 .= pK_Epz  .* pqpz 
+        # pK_Epz = zeros(((128,64,20)))
+        # for i in 2:19
+        #     pK_Epz[:,:,i] .= (K_E[:,:,i+1] .- K_E[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        # end
+        # pK_Epz[:,:,1] .=  (K_E[:,:,2]  .- K_E[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pK_Epz[:,:,20] .= (K_E[:,:,20] .- K_E[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
+        # factor2_2 .= pK_Epz  .* pqpz 
 
-        ppqpzpz = zeros(((128,64,20)))
-        for i in 2:19
-            ppqpzpz[:,:,i] .= (pqpz[:,:,i+1] .- pqpz[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
-        end
-        ppqpzpz[:,:,1] .=  (pqpz[:,:,2]  .- pqpz[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        ppqpzpz[:,:,20] .= (pqpz[:,:,20] .- pqpz[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_3 .= K_E .* ppqpzpz
+        # ppqpzpz = zeros(((128,64,20)))
+        # for i in 2:19
+        #     ppqpzpz[:,:,i] .= (pqpz[:,:,i+1] .- pqpz[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        # end
+        # ppqpzpz[:,:,1] .=  (pqpz[:,:,2]  .- pqpz[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # ppqpzpz[:,:,20] .= (pqpz[:,:,20] .- pqpz[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
+        # factor2_3 .= K_E .* ppqpzpz
 
-        factor2 .= factor2_1 .+ factor2_2 .+ factor2_3
-        # factor2 .= pallpz ./ rho
-
-        # @info maximum(factor2_1), maximum(factor2_2), maximum(factor2_3)s
-        
-
-        ### 
+        # factor2 .= factor2_1 .+ factor2_2 .+ factor2_3
+        """        
 
         factor = zeros(((128,64,20)))
-        factor .= factor1 .+ factor2
+        factor .=  factor1 .+ factor2
 
         mean_factor_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
@@ -260,9 +214,6 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     end
     
 end 
-
-
-
 
 
 """
@@ -322,7 +273,6 @@ function Four_In_One!(vert_coord::Vert_Coordinate, atmo_data::Atmo_Data,
         
         dlnp_dλ .= x1 .* grid_dλ_ps[:,:,1]
         dlnp_dθ .= x1 .* grid_dθ_ps[:,:,1]
-        
         
         
         # (grid_δu, grid_δv) -= RT ∇p/p 
@@ -437,19 +387,6 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     grid_δtracers  = dyn_data.grid_δtracers .*0.
     grid_tracers_full = dyn_data.grid_tracers_full
     
-    #### 10/30
-    grid_t_eq = dyn_data.grid_t_eq
-    
-    # grid_tracers_q   = dyn_data.grid_tracers_q
-    grid_tracers_ref = dyn_data.grid_tracers_ref
-    
-    # spe_tracers_q_n  = dyn_data.spe_tracers_q_n
-    # spe_tracers_q_c  = dyn_data.spe_tracers_q_c
-    # spe_tracers_q_p  = dyn_data.spe_tracers_q_p
-    
-    spe_tracers_ref  = dyn_data.spe_tracers_ref
-    ### 11/01
-    grid_t_eq_ref   = dyn_data.grid_t_eq_ref
     ### 11/07
     grid_z_full = dyn_data.grid_z_full
     grid_z_half = dyn_data.grid_z_half
@@ -668,8 +605,6 @@ function Get_Topography!(grid_geopots::Array{Float64, 3})
     #####grid_geopots .= 0.0
     ### 2023/10/25
     read_file = load("300day_dry_run_all.dat")
-    # read_file = load("800day_HS_front_RH50_PR5_PRRELAX86400_with_w_all.dat")
-    ###
     grid_geopots .= read_file["grid_geopots_xyzt"][:,:,1,300]
     return
 end 
@@ -701,18 +636,12 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_δu, grid_δv, grid_δps, grid_δt = dyn_data.grid_δu, dyn_data.grid_δv, dyn_data.grid_δps, dyn_data.grid_δt
     grid_u_p, grid_v_p,  grid_t_p = dyn_data.grid_u_p, dyn_data.grid_v_p, dyn_data.grid_t_p
     grid_p_half, grid_p_full = dyn_data.grid_p_half, dyn_data.grid_p_full
-    # grid_t_eq = dyn_data.grid_t_eq
     
-    # grid_t_eq_ref   = dyn_data.grid_t_eq_ref
-    # grid_tracers_ref = dyn_data.grid_tracers_ref
-    ###
-    # spe_tracers_ref = dyn_data.spe_tracers_ref
     ### 11/08
     grid_z_full = dyn_data.grid_z_full
     
     ### 11/02
     read_file  = load("300day_dry_run_all.dat")
-    # read_file2 = load("day800_hope_test_all.dat")
     initial_day = 300
     ### 11/08
     grid_z_full .= read_file["grid_z_full_xyzt"][:,:,:,initial_day]
@@ -722,26 +651,13 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_δt       .= read_file["grid_δt_xyzt"][:,:,:,initial_day]
     grid_δps       .= read_file["grid_δps_xyzt"][:,:,1,initial_day]
 
-    ### FIXME
-    # grid_u_p .= read_file["grid_u_c_xyzt"][:,:,:,initial_day-1]
-    # grid_v_p .= read_file["grid_v_c_xyzt"][:,:,:,initial_day-1]
-    # grid_t_p .= read_file["grid_t_c_xyzt"][:,:,:,initial_day-1]
-
     grid_p_half .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
     grid_p_full .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
 
-    # grid_t_eq .= read_file["grid_t_eq_xyzt"][:,:,:,initial_day]
-    ###
     
     
     rdgas = atmo_data.rdgas
     #grid_t    .= init_t
-    ### 2023/10/25
-    # read_file = load("300day_dry_all.dat")
-    # read_file = load("800day_HS_front_RH50_PR5_PRRELAX86400_with_w_all.dat")
-    ###
-    
-    # initial_day = 300
     ### 2023/10/27
     grid_t    .= read_file["grid_t_c_xyzt"][:,:,:,initial_day] 
     ###
@@ -854,9 +770,6 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     grid_tracers_c .= zeros(size(grid_tracers_c)...)
     # grid_tracers_c .= grid_tracers_q .- grid_tracers_ref
     """
-    ### 11/01
-    # Trans_Grid_To_Spherical!(mesh, grid_tracers_ref, spe_tracers_ref)
-    # Trans_Spherical_To_Grid!(mesh, spe_tracers_ref, grid_tracers_ref)
     
     ###
     Trans_Grid_To_Spherical!(mesh, grid_tracers_c, spe_tracers_c)
@@ -953,22 +866,7 @@ function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_trace
     ### let grid_tracers_diff be the C (condensation rate)
     grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) #./ (2*Δt)
     # @info maximum(grid_tracers_diff)
-    ### latent heat E = rho_a * L * C_E * V_a * (q_sat,s - q_a)
-    # make rho
-    # rho = zeros(((128,64,20)))
-    rho_a  = zeros((128,64))
-    rho_a .= grid_p_full[:,:,20] ./ Rd ./ grid_t[:,:,20]
-    # make v_a
-    V_a  = zeros((128,64))
-    V_a .= (grid_u[:,:,20].^2 .+ grid_v[:,:,20].^2).^0.5
-    # make q_sat,s
-    grid_tracers_c_max_surface = zeros((128,64))
-    grid_tracers_c_max_surface[:,:] .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) ./ (grid_p_full[:,:,20] .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t[:,:,20])) )) 
-    # finally make E
-    # grid_δt[:,:,20]  .+= rho_a .* Lv .* C_E .* V_a .* (grid_tracers_c_max_surface .- grid_tracers_c[:,:,20]) ./ day_to_sec #
     grid_δt  .+= (grid_tracers_diff .* Lv ./ cp)./day_to_sec .* L 
-    # @info maximum((grid_tracers_diff .* Lv ./ cp))
-    # @info maximum(grid_δt)
     
     return grid_tracers_diff
 end

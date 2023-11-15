@@ -39,7 +39,7 @@ function Atmos_Spectral_Dynamics_Main(physcis_params::Dict{String, Float64}, end
     implicit_coef = 0.5
     day_to_sec = 86400
     start_time = 0
-    end_time = end_day*day_to_sec  #
+    end_time = end_day*day_to_sec  
     Δt = 600
     init_step = true
     
