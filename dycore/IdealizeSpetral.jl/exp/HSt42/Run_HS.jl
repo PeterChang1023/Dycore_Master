@@ -30,7 +30,7 @@ op_man = Atmos_Spectral_Dynamics_Main(physics_params, end_day, spinup_day)
 
 
 Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
-# Finalize_Output!(op_man, "10day_hope_final.dat", "10day_hope_all.dat")
+# Finalize_Output!(op_man, "25day_hope_final.dat", "25day_hope_all.dat")
 # Finalize_Output!(op_man, "50day_hope_final.dat", "50day_hope_all.dat")
 # Finalize_Output!(op_man, "200day_hope_final.dat", "200day_hope_all.dat")
 

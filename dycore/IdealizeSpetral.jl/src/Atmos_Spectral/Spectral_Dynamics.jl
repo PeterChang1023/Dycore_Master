@@ -73,9 +73,9 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     Δt = Get_Δt(integrator)
 
     if (do_water_correction) 
-        factor1 = dyn_data.factor1 .*0
-        factor2 = dyn_data.factor2 .*0
-        factor3 = dyn_data.factor3 .*0
+        factor1 = dyn_data.factor1 
+        factor2 = dyn_data.factor2 
+        factor3 = dyn_data.factor3 
 
         grid_z_full = dyn_data.grid_z_full
         grid_z_half = dyn_data.grid_z_half
@@ -84,27 +84,11 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         K_E = dyn_data.K_E
         pqpz = dyn_data.pqpz
 
-        ### extrapolate
-        # z
-        itp            = interpolate(grid_z_full, BSpline(Linear()))  
-        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
-        grid_z_full_ex = zeros(((128,64,22)))
-        # grid_tracers_c
-        itp            = interpolate(grid_tracers_n, BSpline(Linear()))  
-        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
-        grid_tracers_n_ex = zeros(((128,64,22)))
-        grid_tracers_n_ex[:,:,1:22] .= etpf[:,:,1:22]
-        # grid_z_full_ex[:,:,1] .= etpf[:,:,1]
-        # grid_z_full_ex[:,:,2] .= etpf[:,:,2]
 
-
-        # grid_z_full_ex[:,:,20] .= etpf[:,:,20]
-        # grid_z_full_ex[:,:,21] .= etpf[:,:,21]
-        # grid_z_full_ex[:,:,22] .= etpf[:,:,22]
         # etp0 = extrapolate(itp, 0)        # gives 0 everywhere outside [1,7]
         # print(etpf[:,:,21])
         ###
-        C_E = 0.0044 ######## try 
+        C_E = 0.0011 ######## try 
         Lv = 2.5*10^6.
         Rv = 461.
         Rd = 287.
@@ -147,10 +131,10 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### original ###
         # pqpz = zeros(((128,64,20)))
         # for i in 2:19
-        #     pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+            # pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         # end
         # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
+        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
         ################
         pqpz = zeros(((128,64,16)))
         for i in 3:18
@@ -169,8 +153,6 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         for i in 1:20
             rho[:,:,i] .=  grid_p_full[:,:,i] ./ Rd ./ (grid_t[:,:,i])#.+ grid_t[:,:,i-1])
         end
-        
-
 
         ###
         
@@ -193,35 +175,59 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
 
         factor2 .= pallpz_ex ./ rho
         
+
         """
         ## factor2 another try
         factor2_1 = zeros(((128,64,20)))
         factor2_2 = zeros(((128,64,20)))
         factor2_3 = zeros(((128,64,20)))
 
+        # factor2_1
         prhopz = zeros(((128,64,20)))
-        for i in 2:19
+        for i in 3:18
             prhopz[:,:,i] .= (rho[:,:,i+1] .- rho[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        prhopz[:,:,1] .= (rho[:,:,2] .- rho[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # prhopz[:,:,1] .= (rho[:,:,2] .- rho[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         # prhopz[:,:,20] .= (rho[:,:,20] .- rho[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_1 .= prhopz .* K_E .* pqpz ./ rho
+        itp            = interpolate(prhopz, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        prhopz_ex = zeros(((128,64,20)))
+        prhopz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        prhopz_ex[:,:, 3:18] .= prhopz[:,:,1:16]
+        prhopz_ex[:,:,19:20] .= etpf[:,:,17:18]
+        factor2_1 .= prhopz_ex .* K_E .* pqpz_ex ./ rho
 
+        # factor2_2
         pK_Epz = zeros(((128,64,20)))
-        for i in 2:19
+        for i in 3:18
             pK_Epz[:,:,i] .= (K_E[:,:,i+1] .- K_E[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        pK_Epz[:,:,1] .=  (K_E[:,:,2]  .- K_E[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pK_Epz[:,:,1] .=  (K_E[:,:,2]  .- K_E[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         # pK_Epz[:,:,20] .= (K_E[:,:,20] .- K_E[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_2 .= pK_Epz  .* pqpz 
+        itp            = interpolate(prhopz, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        pK_Epz_ex = zeros(((128,64,20)))
+        # print(size(etpf[:,:,-2:-1]))
+        pK_Epz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        pK_Epz_ex[:,:, 3:18] .= pK_Epz[:,:,1:16]
+        pK_Epz_ex[:,:,19:20] .= etpf[:,:,17:18]
+        factor2_2 .= pK_Epz_ex  .* pqpz_ex 
 
+        # factor3_3
         ppqpzpz = zeros(((128,64,20)))
-        for i in 2:19
+        for i in 3:18
             ppqpzpz[:,:,i] .= (pqpz[:,:,i+1] .- pqpz[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        ppqpzpz[:,:,1] .=  (pqpz[:,:,2]  .- pqpz[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # ppqpzpz[:,:,1] .=  (pqpz[:,:,2]  .- pqpz[:,:,1])  ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         # ppqpzpz[:,:,20] .= (pqpz[:,:,20] .- pqpz[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2_3 .= K_E .* ppqpzpz
+        itp            = interpolate(prhopz, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        ppqpzpz_ex = zeros(((128,64,20)))
+        # print(size(etpf[:,:,-2:-1]))
+        ppqpzpz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        ppqpzpz_ex[:,:, 3:18] .= ppqpzpz[:,:,1:16]
+        ppqpzpz_ex[:,:,19:20] .= etpf[:,:,17:18]
+        factor2_3 .= K_E .* ppqpzpz_ex
 
         factor2 .= factor2_1 .+ factor2_2 .+ factor2_3
         """
@@ -236,27 +242,23 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         factor12 .=  (factor1 .+ factor2).*mean_factor3_n./mean_factor12_n
         factor   .=  factor12 .- factor3
 
+        grid_tracers_n .+= factor
+        grid_tracers_n[grid_tracers_n .< 0] .= 0 
         # mean_factor_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
-        # mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
-        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        # # mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
-        
-        #factor         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor_n
-        grid_tracers_n    .+= factor 
         mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
 
-
-        # factor1_2 = zeros(((128,64,20)))
-        # factor1_2 .= factor1 .+ factor2
+        # factor1 = zeros(((128,64,20)))
+        # # factor1_2 .= factor1 .+ factor2
 
         # grid_tracers_n[grid_tracers_n .< 0.] .= 0
-        # mean_factor1_2_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1_2, grid_ps_n)
+        # mean_factor1_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1, grid_ps_n)
         # mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
         # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        # factor1_2         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor1_2_n
-        # grid_tracers_n .+= factor1_2
+        # factor1         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor1_n
+        # grid_tracers_n    .+=  factor1
+
 
         ###
 
