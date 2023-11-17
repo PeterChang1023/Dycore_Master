@@ -242,10 +242,10 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # # mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
         
         #factor         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor_n
-        # grid_tracers_n    .+= factor 
-        # mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
-        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        # grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
+        grid_tracers_n    .+= factor 
+        mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
+        mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
 
 
         # factor1_2 = zeros(((128,64,20)))
