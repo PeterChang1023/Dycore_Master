@@ -88,7 +88,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # etp0 = extrapolate(itp, 0)        # gives 0 everywhere outside [1,7]
         # print(etpf[:,:,21])
         ###
-        C_E = 0.0011 ######## try 
+        C_E = 0.0044 ######## try 0.01=> 1E-6 
         Lv = 2.5*10^6.
         Rv = 461.
         Rd = 287.
@@ -111,9 +111,9 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### add moisture at surface following paper
         ### ∂q_a/∂t = C_E * V_a * (q_sat,a - q_a) ./ z_a 
         ### factor1
-        surface_n  = zeros(size(grid_tracers_c)...)
-        surface_n[:,:,20] .= grid_tracers_n[:,:,20]
-        surface_n = min.(surface_n, grid_tracers_n_max)
+        # surface_n  = zeros(size(grid_tracers_c)...)
+        # surface_n[:,:,20] .= grid_tracers_n[:,:,20]
+        # surface_n = min.(surface_n, grid_tracers_n_max)
         factor1[:,:,20] .= C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20])) ./ grid_z_full[:,:,20]
         ###
 
@@ -153,12 +153,15 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         for i in 1:20
             rho[:,:,i] .=  grid_p_full[:,:,i] ./ Rd ./ (grid_t[:,:,i])#.+ grid_t[:,:,i-1])
         end
+        # rho_s = zeros(((128,64,1)))
+        # rho_s[:,:,1] .=  grid_ps_n[:,:,1] ./ Rd ./ (grid_t[:,:,20])
 
         ###
         
         # let all = rho * K_E * ∂q/∂z
         all    = zeros(((128,64,20)))
-        all   .= rho .* K_E .* pqpz_ex
+        all  .= rho .* K_E .* pqpz_ex
+        # all[:,:,20]   .= rho_s[:,:,1] .* K_E[:,:,20] .* pqpz_ex[:,:,20]
         pallpz = zeros(((128,64,16)))
         for i in 3:18
             pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1])
