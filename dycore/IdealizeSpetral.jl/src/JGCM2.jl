@@ -1,6 +1,7 @@
 __precompile__(true)
 module JGCM
 
+using Interpolations
 using Revise
 using LinearAlgebra
 using FFTW
@@ -8,8 +9,6 @@ using Statistics
 using JLD2
 using MAT
 using PyPlot
-using Interpolations
-# using Plots
 
 include("Atmos_Spectral/Gauss_And_Legendre.jl")
 include("Atmos_Spectral/Spectral_Spherical_Mesh.jl")

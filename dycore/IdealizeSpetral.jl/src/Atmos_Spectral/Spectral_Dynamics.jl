@@ -1,5 +1,7 @@
-export Compute_Corrections_Init, Compute_Corrections!, Four_In_One!, Spectral_Dynamics!, Get_Topography!, Spectral_Initialize_Fields!, Spectral_Dynamics_Physics!, Atmosphere_Update!
 using Statistics
+using Interpolations
+export Compute_Corrections_Init, Compute_Corrections!, Four_In_One!, Spectral_Dynamics!, Get_Topography!, Spectral_Initialize_Fields!, Spectral_Dynamics_Physics!, Atmosphere_Update!
+
 
 
 function Compute_Corrections_Init(vert_coord::Vert_Coordinate, mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
@@ -71,9 +73,9 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     Δt = Get_Δt(integrator)
 
     if (do_water_correction) 
-        factor1 = dyn_data.factor1
-        factor2 = dyn_data.factor2
-        factor3 = dyn_data.factor3
+        factor1 = dyn_data.factor1 .*0
+        factor2 = dyn_data.factor2 .*0
+        factor3 = dyn_data.factor3 .*0
 
         grid_z_full = dyn_data.grid_z_full
         grid_z_half = dyn_data.grid_z_half
@@ -82,6 +84,26 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         K_E = dyn_data.K_E
         pqpz = dyn_data.pqpz
 
+        ### extrapolate
+        # z
+        itp            = interpolate(grid_z_full, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        grid_z_full_ex = zeros(((128,64,22)))
+        # grid_tracers_c
+        itp            = interpolate(grid_tracers_n, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        grid_tracers_n_ex = zeros(((128,64,22)))
+        grid_tracers_n_ex[:,:,1:22] .= etpf[:,:,1:22]
+        # grid_z_full_ex[:,:,1] .= etpf[:,:,1]
+        # grid_z_full_ex[:,:,2] .= etpf[:,:,2]
+
+
+        # grid_z_full_ex[:,:,20] .= etpf[:,:,20]
+        # grid_z_full_ex[:,:,21] .= etpf[:,:,21]
+        # grid_z_full_ex[:,:,22] .= etpf[:,:,22]
+        # etp0 = extrapolate(itp, 0)        # gives 0 everywhere outside [1,7]
+        # print(etpf[:,:,21])
+        ###
         C_E = 0.0044 ######## try 
         Lv = 2.5*10^6.
         Rv = 461.
@@ -122,30 +144,54 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # ∂q/∂t    = -1 / rho * ∂(rho*\overbar{w'q'})/ ∂z
         # ∂q/∂t    =  1 / rho * ∂[rho * K_E * {∂q/∂z)]/ ∂z
         # cal ∂q/∂z
-        
-        pqpz = zeros(((128,64,20)))
-        for i in 2:19
-            pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        ### original ###
+        # pqpz = zeros(((128,64,20)))
+        # for i in 2:19
+        #     pqpz[:,:,i] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        # end
+        # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
+        ################
+        pqpz = zeros(((128,64,16)))
+        for i in 3:18
+            pqpz[:,:,i-2] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        
+        # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
+        itp            = interpolate(pqpz, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        pqpz_ex = zeros(((128,64,20)))
+        pqpz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        pqpz_ex[:,:, 3:18] .= pqpz[:,:,1:16]
+        pqpz_ex[:,:,19:20] .= etpf[:,:,17:18]
         # cal rho
         rho = zeros(((128,64,20)))
         for i in 1:20
             rho[:,:,i] .=  grid_p_full[:,:,i] ./ Rd ./ (grid_t[:,:,i])#.+ grid_t[:,:,i-1])
         end
         
+
+
+        ###
+        
         # let all = rho * K_E * ∂q/∂z
         all    = zeros(((128,64,20)))
-        all   .= rho .* K_E .* pqpz
-        pallpz = zeros(((128,64,20)))
-        for i in 2:19
-            pallpz[:,:,i] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1])
+        all   .= rho .* K_E .* pqpz_ex
+        pallpz = zeros(((128,64,16)))
+        for i in 3:18
+            pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1])
         end
-        pallpz[:,:,1]  .= (all[:,:,2] .- all[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
-        # pallpz[:,:,20] .= (all[:,:,20] .- all[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full[:,:,19])
-        factor2 .= pallpz ./ rho
+        # pallpz[:,:,1]  .= (all[:,:,2] .- all[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
+        # pallpz[:,:,20] .= (all[:,:,20] .- all[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
+        itp            = interpolate(pallpz, BSpline(Linear()))  
+        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        pallpz_ex = zeros(((128,64,20)))
+        # print(size(etpf[:,:,-2:-1]))
+        pallpz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        pallpz_ex[:,:, 3:18] .= pallpz[:,:,1:16]
+        pallpz_ex[:,:,19:20] .= etpf[:,:,17:18]
+
+        factor2 .= pallpz_ex ./ rho
         
         """
         ## factor2 another try
@@ -186,7 +232,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         mean_factor12_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1.+factor2, grid_ps_n)
 
         factor12  =  zeros(((128,64,20)))
-        factor  =  zeros(((128,64,20)))
+        factor    =  zeros(((128,64,20)))
         factor12 .=  (factor1 .+ factor2).*mean_factor3_n./mean_factor12_n
         factor   .=  factor12 .- factor3
 
@@ -196,10 +242,10 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # # mean_moisture_max_n =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
         
         #factor         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor_n
-        grid_tracers_n    .+= factor 
-        mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
-        mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
+        # grid_tracers_n    .+= factor 
+        # mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
+        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
 
 
         # factor1_2 = zeros(((128,64,20)))
@@ -221,7 +267,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # @info maximum(factor1)
         # @info maximum(factor2)
 
-        return factor1, factor2, K_E, pqpz, rho
+        return factor1, factor2, factor3, K_E, pqpz_ex, rho
     end
     
 end 
@@ -417,6 +463,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     ### 11/12
     factor1 = dyn_data.factor1
     factor2 = dyn_data.factor2
+    factor3 = dyn_data.factor3
+
 
     K_E     = dyn_data.K_E
     pqpz    = dyn_data.pqpz
@@ -550,7 +598,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Trans_Spherical_To_Grid!(mesh, spe_t_n, grid_t_n)
 
 
-    factor1_loc, factor2_loc, K_E_loc, pqpz_loc, rho_loc = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
+    factor1_loc, factor2_loc, factor3_loc, K_E_loc, pqpz_loc, rho_loc = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p, 
         grid_u_n, grid_v_n,
         grid_energy_full, grid_ps_p,grid_ps,
         grid_ps_n, spe_lnps_n, 
@@ -560,6 +608,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
 
     factor1 .= factor1_loc
     factor2 .= factor2_loc
+    factor3 .= factor3_loc
+
     add_water .= factor1 .+ factor2
 
     K_E .= K_E_loc
