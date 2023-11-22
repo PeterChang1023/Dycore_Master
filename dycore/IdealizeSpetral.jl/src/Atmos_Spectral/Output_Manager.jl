@@ -93,6 +93,8 @@ mutable struct Output_Manager
     factor1_xyzt::Array{Float64,4}
     factor2_xyzt::Array{Float64,4}
     factor3_xyzt::Array{Float64,4}
+    factor4_xyzt::Array{Float64,4}
+
 
 
     K_E_xyzt::Array{Float64,4}
@@ -191,6 +193,8 @@ function Output_Manager(mesh::Spectral_Spherical_Mesh, vert_coord::Vert_Coordina
     factor1_xyzt = zeros(Float64, nλ,  nθ, nd, n_day) 
     factor2_xyzt = zeros(Float64, nλ,  nθ, nd, n_day) 
     factor3_xyzt = zeros(Float64, nλ,  nθ, nd, n_day) 
+    factor4_xyzt = zeros(Float64, nλ,  nθ, nd, n_day) 
+
 
 
     K_E_xyzt = zeros(Float64, nλ,  nθ, nd, n_day)
@@ -203,7 +207,7 @@ function Output_Manager(mesh::Spectral_Spherical_Mesh, vert_coord::Vert_Coordina
     λc, θc, σc,
     t_daily_zonal_mean, t_eq_daily_zonal_mean, u_daily_zonal_mean, v_daily_zonal_mean, 
     ps_daily_mean, n_daily_mean, 
-    t_zonal_mean,t_eq_zonal_mean, u_zonal_mean, v_zonal_mean, ps_mean, grid_u_c_xyzt, grid_v_c_xyzt, grid_t_c_xyzt, grid_t_eq_xyzt, grid_geopots_xyzt, grid_ps_xyzt, spe_vor_c_xyzt, spe_div_c_xyzt, grid_lnps_xyzt, grid_p_half_xyzt, grid_Δp_xyzt,  grid_lnp_half_xyzt,  grid_p_full_xyzt, grid_lnp_full_xyzt, spe_lnps_c_xyzt, spe_lnps_p_xyzt, grid_tracers_n_xyz1t, grid_tracers_c_xyz1t, grid_tracers_p_xyz1t,  grid_tracers_diff_xyz1t, spe_tracers_n_xyz1t, spe_tracers_c_xyz1t, spe_tracers_p_xyz1t, grid_w_full_xyzt, grid_vor_c_xyzt, grid_δu_xyzt, grid_δv_xyzt, grid_δt_xyzt, grid_δps_xyzt, grid_t_eq_ref_xyzt, grid_z_full_xyzt, grid_z_half_xyzt, unsaturated_n_xyzt, add_water_xyzt, factor1_xyzt, factor2_xyzt, factor3_xyzt, K_E_xyzt, pqpz_xyzt, rho_xyzt)
+    t_zonal_mean,t_eq_zonal_mean, u_zonal_mean, v_zonal_mean, ps_mean, grid_u_c_xyzt, grid_v_c_xyzt, grid_t_c_xyzt, grid_t_eq_xyzt, grid_geopots_xyzt, grid_ps_xyzt, spe_vor_c_xyzt, spe_div_c_xyzt, grid_lnps_xyzt, grid_p_half_xyzt, grid_Δp_xyzt,  grid_lnp_half_xyzt,  grid_p_full_xyzt, grid_lnp_full_xyzt, spe_lnps_c_xyzt, spe_lnps_p_xyzt, grid_tracers_n_xyz1t, grid_tracers_c_xyz1t, grid_tracers_p_xyz1t,  grid_tracers_diff_xyz1t, spe_tracers_n_xyz1t, spe_tracers_c_xyz1t, spe_tracers_p_xyz1t, grid_w_full_xyzt, grid_vor_c_xyzt, grid_δu_xyzt, grid_δv_xyzt, grid_δt_xyzt, grid_δps_xyzt, grid_t_eq_ref_xyzt, grid_z_full_xyzt, grid_z_half_xyzt, unsaturated_n_xyzt, add_water_xyzt, factor1_xyzt, factor2_xyzt, factor3_xyzt, factor4_xyzt, K_E_xyzt, pqpz_xyzt, rho_xyzt)
 end
 
 function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, current_time::Int64)
@@ -270,6 +274,8 @@ function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, curr
     factor1_xyzt = output_manager.factor1_xyzt
     factor2_xyzt = output_manager.factor2_xyzt
     factor3_xyzt = output_manager.factor3_xyzt
+    factor4_xyzt = output_manager.factor4_xyzt
+
 
 
 
@@ -349,6 +355,8 @@ function Update_Output!(output_manager::Output_Manager, dyn_data::Dyn_Data, curr
     factor1_xyzt[:,:,:,i_day] .= dyn_data.factor1[:,:,:]
     factor2_xyzt[:,:,:,i_day] .= dyn_data.factor2[:,:,:]
     factor3_xyzt[:,:,:,i_day] .= dyn_data.factor3[:,:,:]
+    factor4_xyzt[:,:,:,i_day] .= dyn_data.factor4[:,:,:]
+
 
 
     K_E_xyzt[:,:,:,i_day] .= dyn_data.K_E[:,:,:]
@@ -421,6 +429,8 @@ function Finalize_Output!(output_manager::Output_Manager, save_file_name::String
     factor1_xyzt = output_manager.factor1_xyzt
     factor2_xyzt = output_manager.factor2_xyzt
     factor3_xyzt = output_manager.factor3_xyzt
+    factor4_xyzt = output_manager.factor4_xyzt
+
 
 
     K_E_xyzt = output_manager.K_E_xyzt
@@ -450,11 +460,11 @@ function Finalize_Output!(output_manager::Output_Manager, save_file_name::String
     ps_mean .= dropdims(mean(ps_daily_mean[:,:,spinup_day+1:n_day], dims=3), dims=3)
        
     if save_file_name != "None"
-        @save save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt add_water_xyzt factor1_xyzt factor2_xyzt factor3_xyzt K_E_xyzt pqpz_xyzt rho_xyzt
+        @save save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt add_water_xyzt factor1_xyzt factor2_xyzt factor3_xyzt factor4_xyzt K_E_xyzt pqpz_xyzt rho_xyzt
     end
 
     if mean_save_file_name != "None"
-        @save mean_save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt add_water_xyzt factor1_xyzt factor2_xyzt factor3_xyzt K_E_xyzt pqpz_xyzt rho_xyzt
+        @save mean_save_file_name grid_u_c_xyzt grid_v_c_xyzt grid_t_c_xyzt grid_t_eq_xyzt grid_geopots_xyzt grid_ps_xyzt spe_vor_c_xyzt spe_div_c_xyzt grid_lnps_xyzt grid_p_half_xyzt grid_Δp_xyzt grid_lnp_half_xyzt grid_p_full_xyzt grid_lnp_full_xyzt spe_lnps_c_xyzt spe_lnps_p_xyzt grid_tracers_c_xyz1t grid_tracers_n_xyz1t grid_tracers_p_xyz1t grid_tracers_diff_xyz1t grid_w_full_xyzt grid_vor_c_xyzt grid_δu_xyzt grid_δv_xyzt grid_δt_xyzt grid_δps_xyzt grid_t_eq_ref_xyzt grid_z_full_xyzt grid_z_half_xyzt unsaturated_n_xyzt add_water_xyzt factor1_xyzt factor2_xyzt factor3_xyzt factor4_xyzt K_E_xyzt pqpz_xyzt rho_xyzt
     end
 end
 

@@ -180,6 +180,9 @@ mutable struct Dyn_Data
     factor1::Array{Float64,3}
     factor2::Array{Float64,3}
     factor3::Array{Float64,3}
+    factor4::Array{Float64,3}
+
+
 
     K_E::Array{Float64,3}
     pqpz::Array{Float64,3}
@@ -349,6 +352,8 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
     factor1 = zeros(Float64, nλ,  nθ, nd)
     factor2 = zeros(Float64, nλ,  nθ, nd)
     factor3 = zeros(Float64, nλ,  nθ, nd)
+    factor4 = zeros(Float64, nλ,  nθ, nd)
+
 
 
     K_E = zeros(Float64, nλ,  nθ, nd)
@@ -389,7 +394,7 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
     grid_z_full, grid_z_half,grid_t_eq,
     #########################################################################
     spe_d1, spe_d2, grid_d_full1, grid_d_full2, grid_d_half1, grid_d_half2,
-    spe_zeros, grid_t_eq_ref, grid_tracers_ref, spe_tracers_ref, unsaturated_n, add_water, factor1, factor2, factor3, K_E, pqpz, rho)
+    spe_zeros, grid_t_eq_ref, grid_tracers_ref, spe_tracers_ref, unsaturated_n, add_water, factor1, factor2, factor3, factor4, K_E, pqpz, rho)
 end
 
 function Time_Advance!(dyn_data::Dyn_Data)

@@ -78,10 +78,12 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     Δt = Get_Δt(integrator)
 
     if (do_water_correction) 
-        # grid_tracers_n = dyn_data.grid_tracers_n ### 11/20
+        grid_tracers_n = dyn_data.grid_tracers_n ### 11/20
         factor1 = dyn_data.factor1 
         factor2 = dyn_data.factor2 
         factor3 = dyn_data.factor3  
+        factor4 = dyn_data.factor4  
+
 
         grid_z_full = dyn_data.grid_z_full
         grid_z_half = dyn_data.grid_z_half
@@ -126,23 +128,29 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         end
         rho_s = zeros(((128,64,1)))
         rho_s[:,:,1] .=  grid_ps_n[:,:,1] ./ Rd ./ (grid_t[:,:,20])
-
-        factor1[:,:,20] .=  C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20])) ./ grid_z_full[:,:,20] 
+        # cal za
+        tv = zeros(((128,64,1)))
+        za = zeros(((128,64,1)))
+        tv[:,:,1] .= grid_t[:,:,20] .* (1. .+ 0.608 .* grid_tracers_c[:,:,20])
+        za[:,:,1] .= Rd .* tv./9.81 .* (log.(grid_ps_n[:,:,1]) .- log.(grid_p_full[:,:,20])) ./2
+        ### 
+        factor1[:,:,20] .=  C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20])) ./ za[:,:,1]
 
         ###
 
         ### factor2
+        C_E_factor2 = 0.0044
         # eddy diffusivity coefficient, K_E
         V_a = V_n[:,:,20]
-        for i in 15:20
-            K_E[:,:,i] .= C_E .* V_a .* grid_z_full[:,:,20]
+        for i in 17:20
+            K_E[:,:,i] .= C_E_factor2 .* V_a .* za[:,:,1]
         end
-        K_E[:,:, 1:14] .= C_E .* V_a .* grid_z_full[:,:,20] .* exp.(-((grid_p_full[:,:,15] .- grid_p_full[:,:,1:14]) ./ 10000.).^2)
+        K_E[:,:, 1:16] .= C_E_factor2 .* V_a .* za[:,:,1] .* exp.(-((grid_p_full[:,:,17] .- grid_p_full[:,:,1:16]) ./ 10000.).^2)
         # \overbar{w'q'} = -K_E * ∂q/∂z, and 
         # ∂q/∂t    = -1 / rho * ∂(rho*\overbar{w'q'})/ ∂z
         # ∂q/∂t    =  1 / rho * ∂[rho * K_E * {∂q/∂z)]/ ∂z
         # \overbar{w'q'}_s = C_E * |Va| *(q_sat,s - q_a)
-        # ∂q_s/∂t    =  1 / rho * ∂[rho * C_E * |Va| *(q_sat,s - q_a)]/ ∂z
+        # ∂q_s/∂t    =  1 / rho * ∂[rho * C_E * |Va| * (q_sat,s - q_a)]/ ∂z
 
         # cal ∂q/∂z
         ### original ###
@@ -159,18 +167,18 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         end
         # pqpz[:,:, 1] .=  (grid_tracers_n[:,:,2] .- grid_tracers_n[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         # pqpz[:,:,20] .=  (grid_tracers_n[:,:,20] .- grid_tracers_n[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
-        itp            = interpolate(pqpz, BSpline(Linear()))  
-        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        itp_pqpz            = interpolate(pqpz, BSpline(Linear()))  
+        etpf_pqpz           = extrapolate(itp_pqpz, Linear())   # gives 1 on the left edge and 7 on the right edge
         pqpz_ex = zeros(((128,64,20)))
-        pqpz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        pqpz_ex[:,:, 1:2]  .= etpf_pqpz[:,:,-2:-1]
         pqpz_ex[:,:, 3:18] .= pqpz[:,:,1:16]
-        pqpz_ex[:,:,19:20] .= etpf[:,:,17:18]
+        pqpz_ex[:,:,19:20] .= etpf_pqpz[:,:,17:18]
         ###
         
         # let all = rho * K_E * ∂q/∂z
         all    = zeros(((128,64,20)))
         for i in 1:20
-            all[:,:,i]  .= (rho[:,:,i]) .* K_E[:,:,i] .* pqpz_ex[:,:,i]
+            all[:,:,i]  .= rho[:,:,i] .* pqpz_ex[:,:,i] .* K_E[:,:,i] 
         end
         # ∂q_s/∂t    =  1 / rho * ∂[rho * C_E * |Va| *(q_sat,s - q_a)]/ ∂z
         # all[:,:,20]  .= (rho[:,:,20]) .* C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20]))
@@ -181,16 +189,19 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         end
         # pallpz[:,:,1]  .= (all[:,:,2] .- all[:,:,1]) ./ (grid_z_full[:,:,2] .- grid_z_full[:,:,1])
         # pallpz[:,:,20] .= (all[:,:,20] .- all[:,:,19]) ./ (grid_z_full[:,:,20] .- grid_z_full_ex[:,:,19])
-        itp            = interpolate(pallpz, BSpline(Linear()))  
-        etpf = extrapolate(itp, Linear())   # gives 1 on the left edge and 7 on the right edge
+        itp_pallpz            = interpolate(pallpz, BSpline(Linear()))  
+        etpf_pallpz           = extrapolate(itp_pallpz, Linear())   # gives 1 on the left edge and 7 on the right edge
         pallpz_ex = zeros(((128,64,20)))
         # print(size(etpf[:,:,-2:-1]))
-        pallpz_ex[:,:, 1:2]  .= etpf[:,:,-2:-1]
+        pallpz_ex[:,:, 1:2]  .= etpf_pallpz[:,:,-2:-1]
         pallpz_ex[:,:, 3:18] .= pallpz[:,:,1:16]
-        pallpz_ex[:,:,19:20] .= etpf[:,:,17:18]
+        pallpz_ex[:,:,19:20] .= etpf_pallpz[:,:,17:18]
+
+        # @info maximum(K_E)
+        # @info maximum(pallpz_ex)
 
         for i in 1:20
-            factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,20]
+            factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] 
         end
 
         # factor2[:,:,20] .= rho_s[:,:,1] .* (K_E[:,:,20] .* pqpz_ex[:,:,20]) ./ rho[:,:,20] ./ grid_z_full[:,:,20]
@@ -256,43 +267,57 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         """
         ### factor3
         # factor3  = zeros(((128,64,20)))
-        factor3 .= max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max
-        mean_factor3_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor3, grid_ps_n)
-        mean_factor12_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1 .+ factor2, grid_ps_n)
+        factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
+        # mean_factor3_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor3, grid_ps_n)
 
         # mean_factor1_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1, grid_ps_n)
         # mean_factor2_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor2, grid_ps_n)
 
 
-        # factor12  =  zeros(((128,64,20)))
-        # factor12 .=  (factor1 .+ factor2).*mean_factor3_n./mean_factor12_n
-        # factor   .=  factor12 .- factor3
-
-        factor    =  zeros(((128,64,20)))
-        # factor2 .=  factor2 ./ mean_factor2_n .* mean_factor1_n
-        factor   .=  factor1 .+ factor2 .- factor3
-
-        grid_tracers_n .+= factor
-        # grid_tracers_n .+= factor1 .+ factor2 .- factor3
-
+        ### time method
+        # factor    =  zeros(((128,64,20)))
+        # factor   .=  factor1 .+ factor2 .- factor3
+        grid_tracers_n .-= factor3
         grid_tracers_n[grid_tracers_n .< 0] .= 0 
         # mean_factor_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
-        mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
+        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # grid_tracers_n    .*=  mean_moisture_p./mean_moisture_n
+
+        ### add method
+        # factor = zeros(((128,64,20)))
+        # factor .= factor1 .+ factor2 .- factor3
+        # grid_tracers_n    .+=  factor
+        # # mean_factor_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor, grid_ps_n)
+        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
 
         # factor1 = zeros(((128,64,20)))
-        # # factor1_2 .= factor1 .+ factor2
-
-        # grid_tracers_n[grid_tracers_n .< 0.] .= 0
-        # mean_factor1_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1, grid_ps_n)
-        # mean_moisture_p     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_p, grid_ps_p)
+        # factor1 .= factor1 
+        # mean_factor1_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor1, grid_ps_n)
         # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        # factor1         .*= (mean_moisture_p .- mean_moisture_n)./mean_factor1_n
+        # factor1          .*= (mean_moisture_p .- mean_moisture_n)./mean_factor1_n
         # grid_tracers_n    .+=  factor1
 
+        # factor2 = zeros(((128,64,20)))
+        # factor2 .= factor2 
+        # mean_factor2_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor2, grid_ps_n)
+        # mean_moisture_n     =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # factor2          .*= (mean_moisture_p .- mean_moisture_n)./mean_factor2_n
+        # grid_tracers_n    .+=  factor2
+        ### final correction
+        mean_moisture_max_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
+        grid_tracers_n_max ./= mean_moisture_max_n 
+        factor4             .=  grid_tracers_n_max .* C_E
+
+        factor124             = zeros(((128,64,20)))
+        factor124            .= factor1 .+ factor2 .+ factor4
+        mean_factor124_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor124, grid_ps_n)
+        mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # factor124          .= factor124
+        factor124           .*= (mean_moisture_p-mean_moisture_n)/mean_factor124_n
+        # grid_δtracers .+= factor12
+        grid_tracers_n     .+=  factor124
 
         ###
-
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         
         ### 10/30 
@@ -921,7 +946,7 @@ function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_trace
     ### original
     grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) #./ (2*Δt)
     # @info maximum(grid_tracers_diff)
-    grid_δt  .+= (grid_tracers_diff .* Lv ./ cp)./day_to_sec .* L 
+    grid_δt  .+= (grid_tracers_diff .* Lv ./ cp) ./day_to_sec .* L 
     ###
     return grid_tracers_diff
 end
