@@ -98,14 +98,14 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         cp = 1004.
         #@info "max grid_tracers_c" maximum(grid_tracers_c)
         grid_tracers_n[grid_tracers_n .< 0] .= 0 
-
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
         ### factor3
         factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
-
+    
         grid_tracers_n .-= factor3
-        grid_tracers_n[grid_tracers_n .< 0] .= 0 
+        # grid_tracers_n[grid_tracers_n .< 0] .= 0 
+
         ### 11/08
         V_n  = zeros(((128,64,20)))
         V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
@@ -142,16 +142,16 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # \overbar{w'q'}_s = C_E * |Va| *(q_sat,s - q_a)
         # ∂q_s/∂t    =  1 / rho * ∂[rho * C_E * |Va| * (q_sat,s - q_a)]/ ∂z
 
-        pqpz = zeros(((128,64,16)))
-        for i in 3:18
-            pqpz[:,:,i-2] .=  (grid_tracers_n[:,:,i+1] .- grid_tracers_n[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
+        pqpz = zeros(((128,64,18)))
+        for i in 2:19
+            pqpz[:,:,i-1] .=  (grid_tracers_p[:,:,i+1] .- grid_tracers_p[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
         itp_pqpz            = interpolate(pqpz, BSpline(Linear()))  
         etpf_pqpz           = extrapolate(itp_pqpz, Linear())   # gives 1 on the left edge and 7 on the right edge
         pqpz_ex = zeros(((128,64,20)))
-        pqpz_ex[:,:, 1:2]  .= etpf_pqpz[:,:,-2:-1]
-        pqpz_ex[:,:, 3:18] .= pqpz[:,:,1:16]
-        pqpz_ex[:,:,19:20] .= etpf_pqpz[:,:,17:18]
+        pqpz_ex[:,:, 1]  .= etpf_pqpz[:,:,-1]
+        pqpz_ex[:,:, 2:19] .= pqpz[:,:,1:18]
+        pqpz_ex[:,:,20] .= etpf_pqpz[:,:,20]
         ###
         
         # let all = rho * K_E * ∂q/∂z
@@ -172,43 +172,48 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         pallpz_ex[:,:, 3:18] .= pallpz[:,:,1:16]
         pallpz_ex[:,:,19:20] .= etpf_pallpz[:,:,17:18]
 
+        for i in 1:20
+            factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
+        end
+        factor2[:,:,20] .= 0.
+
         # for i in 1:20
         #     factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
         # end        
-        ### cal PBL Scheme
-        rpdel  = zeros(((128,64,20))) ### = 1 / rho
-        rpdel .= 1. ./ rho
-        CA     = zeros(((128,64,20)))
-        CC     = zeros(((128,64,20)))
-        CE     = zeros(((128,64,20+1)))
-        CF     = zeros(((128,64,20+1)))
+        # ### cal PBL Scheme
+        # rpdel  = zeros(((128,64,20))) ### = 1 / rho
+        # rpdel .= 1. ./ rho
+        # CA     = zeros(((128,64,20)))
+        # CC     = zeros(((128,64,20)))
+        # CE     = zeros(((128,64,20+1)))
+        # CF     = zeros(((128,64,20+1)))
 
-        for k in 1:19
-            CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1]   .* rho[:,:,k+1].^2 
-                           ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
-            CC[:,:,k+1] .= (rpdel[:,:,k+1] .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1] .* rho[:,:,k+1].^2
-                           ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
-        end
-        CA[:,:,20]   .= 0.
-        CC[:,:, 1]   .= 0.
-        CE[:,:,21]   .= 0.
-        CF[:,:,21]   .= 0.
-        for k in 20:-1:1
-            CE[:,:,k]    .= CC[:,:,k] ./ (1. .+ CA[:,:,k] .+ CC[:,:,k] .- CA[:,:,k] .* CE[:,:,k+1])
-            CF[:,:,k]    .= ((grid_tracers_n[:,:,k] .+ CA[:,:,k] .* CF[:,:,k+1])
-                            ./ (1. .+ CA[:,:,k] .+ CC[:,:,k] .- CA[:,:,k] .* CE[:,:,k+1]))
-        end
-        # first calculate the updates at the top model level
-        grid_δtracers[:,:,1] .+= (CF[:,:,1] .- grid_tracers_n[:,:,1]) 
-        factor2[:,:,1] .= (CF[:,:,1] .- grid_tracers_n[:,:,1])  # because CE at top = 0
-        grid_tracers_n[:,:,1] .= CF[:,:,1] 
-        # Loop over the remaining level
-        for k in 2:20
-            grid_δtracers[:,:,k] .+= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
-            factor2[:,:,k] .= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
-            grid_tracers_n[:,:,k] .= CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k]
-        end
-        ################################################################################
+        # for k in 1:19
+        #     CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1]   .* rho[:,:,k+1].^2 
+        #                    ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
+        #     CC[:,:,k+1] .= (rpdel[:,:,k+1] .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1] .* rho[:,:,k+1].^2
+        #                    ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
+        # end
+        # CA[:,:,20]   .= 0.
+        # CC[:,:, 1]   .= 0.
+        # CE[:,:,21]   .= 0.
+        # CF[:,:,21]   .= 0.
+        # for k in 20:-1:1
+        #     CE[:,:,k]    .= CC[:,:,k] ./ (1. .+ CA[:,:,k] .+ CC[:,:,k] .- CA[:,:,k] .* CE[:,:,k+1])
+        #     CF[:,:,k]    .= ((grid_tracers_n[:,:,k] .+ CA[:,:,k] .* CF[:,:,k+1])
+        #                     ./ (1. .+ CA[:,:,k] .+ CC[:,:,k] .- CA[:,:,k] .* CE[:,:,k+1]))
+        # end
+        # # first calculate the updates at the top model level
+        # grid_δtracers[:,:,1] .+= (CF[:,:,1] .- grid_tracers_n[:,:,1]) 
+        # factor2[:,:,1] .= (CF[:,:,1] .- grid_tracers_n[:,:,1])  # because CE at top = 0
+        # grid_tracers_n[:,:,1] .= CF[:,:,1] 
+        # # Loop over the remaining level
+        # for k in 2:20
+        #     grid_δtracers[:,:,k] .+= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
+        #     factor2[:,:,k] .= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
+        #     grid_tracers_n[:,:,k] .= CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k]
+        # end
+        # ################################################################################
 
         ### final correction
         ### from line 128
@@ -218,13 +223,24 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # mean_moisture_max_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
         # grid_tracers_n_max ./= mean_moisture_max_n 
         # factor4             .=  grid_tracers_n_max .* C_E
+        # ### original ###
+        # factor11             = zeros(((128,64,20)))
+        # factor11            .= factor1 
+        # mean_factor11_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor11, grid_ps_n)
+        # mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # factor11           .*= (mean_moisture_p-mean_moisture_n)/mean_factor11_n
+        # grid_tracers_n     .+=  factor11
+        # ###
 
-        factor11             = zeros(((128,64,20)))
-        factor11            .= factor1 
-        mean_factor11_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor11, grid_ps_n)
+        factor12             = zeros(((128,64,20)))
+        factor12            .= factor1 .+ factor2 
+        mean_factor12_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor12, grid_ps_n)
         mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        factor11           .*= (mean_moisture_p-mean_moisture_n)/mean_factor11_n
-        grid_tracers_n     .+=  factor11
+        # factor124          .= factor124
+        factor12           .*= (mean_moisture_p-mean_moisture_n)/mean_factor12_n
+        # grid_δtracers .+= factor12
+        grid_tracers_n     .+=  factor12
+
         ###
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         
@@ -451,7 +467,15 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     # compute pressure based on grid_ps -> grid_p_half, grid_lnp_half, grid_p_full, grid_lnp_full 
     Pressure_Variables!(vert_coord, grid_ps, grid_p_half, grid_Δp, grid_lnp_half, grid_p_full, grid_lnp_full)
 
-    
+    ### factor3
+    # grid_tracers_n_max  = deepcopy(grid_tracers_n)
+    # grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
+    # ### factor3
+    # factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
+
+    # grid_tracers_n .-= factor3
+    # grid_tracers_n[grid_tracers_n .< 0] .= 0 
+    ###
     
     # compute ∇ps = ∇lnps * ps
     Compute_Gradients!(mesh, spe_lnps_c,  grid_dλ_ps, grid_dθ_ps)
