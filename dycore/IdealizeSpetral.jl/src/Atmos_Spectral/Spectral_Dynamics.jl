@@ -178,7 +178,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         CF     = zeros(((128,64,20+1)))
 
         for k in 1:19
-            CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* K_E[:,:,k]   .* rho[:,:,k+1].^2 
+            CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1]   .* rho[:,:,k+1].^2 
                            ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
             CC[:,:,k+1] .= (rpdel[:,:,k+1] .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1] .* rho[:,:,k+1].^2
                            ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
