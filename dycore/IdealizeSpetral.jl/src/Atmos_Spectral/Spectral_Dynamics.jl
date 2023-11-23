@@ -162,7 +162,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
 
         pallpz = zeros(((128,64,16)))
         for i in 3:18
-            pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1])
+            pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
         itp_pallpz            = interpolate(pallpz, BSpline(Linear()))  
         etpf_pallpz           = extrapolate(itp_pallpz, Linear())   # gives 1 on the left edge and 7 on the right edge
@@ -171,11 +171,44 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         pallpz_ex[:,:, 1:2]  .= etpf_pallpz[:,:,-2:-1]
         pallpz_ex[:,:, 3:18] .= pallpz[:,:,1:16]
         pallpz_ex[:,:,19:20] .= etpf_pallpz[:,:,17:18]
-
-        for i in 1:20
+        for i in 1:19
             factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
         end
+
         factor2[:,:,20] .= 0.
+
+        ### After adding factor1 to factor2, then extrapolate
+        factor_odd             = zeros(((128,64,10)))
+        factor_even            = zeros(((128,64,10)))
+        factor_all             = zeros(((128,64,20)))
+
+        factor_odd[:,:, :] .= factor2[:,:,1:2:19]
+        factor_even[:,:,:] .= factor2[:,:,2:2:20]
+
+        itp_odd  = interpolate(factor_odd, BSpline(Cubic()))
+        itp_even = interpolate(factor_even, BSpline(Cubic()))
+
+        count = 1
+        for i in 1.5:1:9.5 # 11.5
+            factor_all[:,:,(count.*2)] .= itp_odd[:,:,i]
+            count += 1 # idx = 2~18
+        end
+
+        count = 2
+        for i in 1.5:1:9.5 # 0.5 10.5
+            factor_all[:,:,(count.*2 .- 1)] .= itp_even[:,:,i]
+            count += 1 # idx = 1~17
+        end
+        # itp_factor_all            = interpolate(itp_even, BSpline(Cubic()))  
+        etpf_factor_all           = extrapolate(itp_even, Linear())
+        factor_all[:,:,19] .=  etpf_factor_all[:,:,10.5]
+        factor_all[:,:,1]  .=  etpf_factor_all[:,:,0.5]
+
+        factor_all[:,:,20]   .= factor1[:,:,20]
+        # itp = interpolate(factor_all, BSpline(Cubic()))
+        # factor_all[:,:,19]   .= itp[:,:,19]
+         
+        
 
         # for i in 1:20
         #     factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
@@ -232,14 +265,14 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # grid_tracers_n     .+=  factor11
         # ###
 
-        factor12             = zeros(((128,64,20)))
-        factor12            .= factor1 .+ factor2 
-        mean_factor12_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor12, grid_ps_n)
+        # factor12             = zeros(((128,64,20)))
+        # factor12            .= factor1 .+ factor2 
+        mean_factor_all_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor_all, grid_ps_n)
         mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         # factor124          .= factor124
-        factor12           .*= (mean_moisture_p-mean_moisture_n)/mean_factor12_n
+        factor_all           .*= (mean_moisture_p-mean_moisture_n)/mean_factor_all_n
         # grid_δtracers .+= factor12
-        grid_tracers_n     .+=  factor12
+        grid_tracers_n     .+=  factor_all
 
         ###
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
