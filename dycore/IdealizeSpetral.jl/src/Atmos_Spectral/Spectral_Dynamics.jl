@@ -97,15 +97,12 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         Rd = 287.
         cp = 1004.
         #@info "max grid_tracers_c" maximum(grid_tracers_c)
-        grid_tracers_n[grid_tracers_n .< 0] .= 0 
+        # ### factor3
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
-        ### factor3
-        factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
-    
-        grid_tracers_n .-= factor3
+        # factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
+        # grid_tracers_n .-= factor3
         # grid_tracers_n[grid_tracers_n .< 0] .= 0 
-
         ### 11/08
         V_n  = zeros(((128,64,20)))
         V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
@@ -146,7 +143,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         for i in 2:19
             pqpz[:,:,i-1] .=  (grid_tracers_p[:,:,i+1] .- grid_tracers_p[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        itp_pqpz            = interpolate(pqpz, BSpline(Linear()))  
+        itp_pqpz            = interpolate(pqpz, BSpline(Cubic()))  
         etpf_pqpz           = extrapolate(itp_pqpz, Linear())   # gives 1 on the left edge and 7 on the right edge
         pqpz_ex = zeros(((128,64,20)))
         pqpz_ex[:,:, 1]  .= etpf_pqpz[:,:,-1]
@@ -164,7 +161,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         for i in 3:18
             pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
         end
-        itp_pallpz            = interpolate(pallpz, BSpline(Linear()))  
+        itp_pallpz            = interpolate(pallpz, BSpline(Cubic()))  
         etpf_pallpz           = extrapolate(itp_pallpz, Linear())   # gives 1 on the left edge and 7 on the right edge
 
         pallpz_ex = zeros(((128,64,20)))
@@ -500,14 +497,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     # compute pressure based on grid_ps -> grid_p_half, grid_lnp_half, grid_p_full, grid_lnp_full 
     Pressure_Variables!(vert_coord, grid_ps, grid_p_half, grid_Δp, grid_lnp_half, grid_p_full, grid_lnp_full)
 
-    ### factor3
-    # grid_tracers_n_max  = deepcopy(grid_tracers_n)
-    # grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
-    # ### factor3
-    # factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
 
-    # grid_tracers_n .-= factor3
-    # grid_tracers_n[grid_tracers_n .< 0] .= 0 
     ###
     
     # compute ∇ps = ∇lnps * ps
@@ -565,10 +555,23 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Filtered_Leapfrog!(integrator, spe_δtracers, spe_tracers_p, spe_tracers_c, spe_tracers_n)
     Trans_Spherical_To_Grid!(mesh, spe_tracers_n, grid_tracers_n)
     ###
+    ### factor3
+    Lv = 2.5*10^6.
+    Rv = 461.
+    Rd = 287.
+    cp = 1004.
+    grid_tracers_n_max  = deepcopy(grid_tracers_n)
+    grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
+    factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
+
+    grid_tracers_n .-= factor3
+    grid_tracers_n[grid_tracers_n .< 0] .= 0 
+
+    ###
    
     ###
     Add_Horizontal_Advection!(mesh, spe_t_c, grid_u, grid_v, grid_δt)
-    grid_tracers_diff_new = HS_forcing_water_vapor!(semi_implicit, grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_u, grid_v)
+    grid_tracers_diff_new = HS_forcing_water_vapor!(semi_implicit, grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_u, grid_v, factor3)
     grid_tracers_diff    .= grid_tracers_diff_new
     ### 10/30
     # @info maximum(grid_tracers_diff)
@@ -860,7 +863,7 @@ function Atmosphere_Update!(mesh::Spectral_Spherical_Mesh, atmo_data::Atmo_Data,
 end 
 
 
-function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_u::Array{Float64, 3},  grid_v::Array{Float64, 3})
+function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_tracers_c::Array{Float64, 3},  grid_t::Array{Float64, 3}, grid_δt::Array{Float64, 3}, grid_p_full::Array{Float64, 3}, grid_u::Array{Float64, 3},  grid_v::Array{Float64, 3}, factor3::Array{Float64, 3})
 
     cp  = 1004.
     Lv = 2.5*10^6.
@@ -907,7 +910,7 @@ function HS_forcing_water_vapor!(semi_implicit::Semi_Implicit_Solver, grid_trace
     ### let grid_tracers_diff be the C (condensation rate)
     ### original
     grid_tracers_diff  .= max.(0, grid_tracers_c .- grid_tracers_c_max) #./ (1 .+ Lv ./ cp .* Lv .* grid_tracers_c_max ./ Rv ./ grid_t .^2) #./ (2*Δt)
-    # @info maximum(grid_tracers_diff)
+    # grid_tracers_diff .= factor3
     grid_δt  .+= (grid_tracers_diff .* Lv ./ cp) ./day_to_sec .* L 
     ###
     return grid_tracers_diff
