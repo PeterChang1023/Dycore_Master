@@ -28,8 +28,8 @@ op_man = Atmos_Spectral_Dynamics_Main(physics_params, end_day, spinup_day)
 # Finalize_Output!(op_man, "day50_qv_v_test_final.dat", "day50_qv_v_test_all.dat")
 # Finalize_Output!(op_man, "day200_qv_v_test_final.dat", "day200_qv_v_test_all.dat")
 
-# Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
-Finalize_Output!(op_man, "25day_factor2_new_final.dat", "25day_factor2_new_all.dat")
+Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
+# Finalize_Output!(op_man, "25day_factor2_new_final.dat", "25day_factor2_new_all.dat")
 # Finalize_Output!(op_man, "25day_from_dry_final.dat", "25day_from_dry_all.dat")
 
 # Finalize_Output!(op_man, "25day_L10_final.dat", "25day_L10_all.dat")

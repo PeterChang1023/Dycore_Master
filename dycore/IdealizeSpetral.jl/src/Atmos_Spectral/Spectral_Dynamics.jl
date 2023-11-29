@@ -78,7 +78,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
     Δt = Get_Δt(integrator)
 
     if (do_water_correction) 
-        grid_tracers_n = dyn_data.grid_tracers_n ### 11/20
+        # grid_tracers_n = dyn_data.grid_tracers_n 
         factor1 = dyn_data.factor1 
         factor2 = dyn_data.factor2 
         factor3 = dyn_data.factor3  
@@ -91,12 +91,11 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         K_E = dyn_data.K_E
         pqpz = dyn_data.pqpz
         ###
-        C_E = 0.0044 ######## try 0.01=> 1E-6 
+        C_E = 0.0044 
         Lv = 2.5*10^6.
         Rv = 461.
         Rd = 287.
         cp = 1004.
-        #@info "max grid_tracers_c" maximum(grid_tracers_c)
         # ### factor3
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
@@ -113,7 +112,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         # cal rho
         rho = zeros(((128,64,20)))
         for i in 1:20
-            rho[:,:,i] .=  grid_p_full[:,:,i] ./ Rd ./ (grid_t[:,:,i])
+            rho[:,:,i] .=  grid_p_half[:,:,i] ./ Rd ./ (grid_t[:,:,i])
         end
         rho_s = zeros(((128,64,1)))
         rho_s[:,:,1] .=  grid_ps_n[:,:,1] ./ Rd ./ (grid_t[:,:,20])
@@ -125,112 +124,14 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### 
         
         factor1[:,:,20] .=  C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20])) ./ za[:,:,1] .* 2. .* Δt
-        # grid_tracers_n .+= factor1[:,:,20] ### directly add it would explode
-        ###########################################################################################
-        ### factor2
-        C_E_factor2 = 0.0044
+
         # eddy diffusivity coefficient, K_E
         V_a = V_n[:,:,20]
         for i in 17:20
-            K_E[:,:,i] .= C_E_factor2 .* V_a .* za[:,:,1]
+            K_E[:,:,i] .= C_E .* V_a .* za[:,:,1]
         end
-        K_E[:,:, 1:16] .= C_E_factor2 .* V_a .* za[:,:,1] .* exp.(-((grid_p_full[:,:,17] .- grid_p_full[:,:,1:16]) ./ 10000.).^2)
-        # \overbar{w'q'} = -K_E * ∂q/∂z, and 
-        # ∂q/∂t    = -1 / rho * ∂(rho*\overbar{w'q'})/ ∂z
-        # ∂q/∂t    =  1 / rho * ∂[rho * K_E * {∂q/∂z)]/ ∂z
-        # \overbar{w'q'}_s = C_E * |Va| *(q_sat,s - q_a)
-        # ∂q_s/∂t    =  1 / rho * ∂[rho * C_E * |Va| * (q_sat,s - q_a)]/ ∂z
-
-        pqpz = zeros(((128,64,18)))
-        for i in 2:19
-            pqpz[:,:,i-1] .=  (grid_tracers_p[:,:,i+1] .- grid_tracers_p[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
-        end
-        itp_pqpz            = interpolate(pqpz, BSpline(Cubic()))  
-        etpf_pqpz           = extrapolate(itp_pqpz, Linear())   # gives 1 on the left edge and 7 on the right edge
-        pqpz_ex = zeros(((128,64,20)))
-        pqpz_ex[:,:, 1]  .= etpf_pqpz[:,:,-1]
-        pqpz_ex[:,:, 2:19] .= pqpz[:,:,1:18]
-        pqpz_ex[:,:,20] .= etpf_pqpz[:,:,20]
-        ###
-        
-        # let all = rho * K_E * ∂q/∂z
-        all    = zeros(((128,64,20)))
-        for i in 1:20
-            all[:,:,i]  .= rho[:,:,i] .* pqpz_ex[:,:,i] .* K_E[:,:,i] 
-        end
-
-        pallpz = zeros(((128,64,16)))
-        for i in 3:18
-            pallpz[:,:,i-2] .= (all[:,:,i+1] .- all[:,:,i-1]) ./ (grid_z_full[:,:,i+1] .- grid_z_full[:,:,i-1]) 
-        end
-        itp_pallpz            = interpolate(pallpz, BSpline(Cubic()))  
-        etpf_pallpz           = extrapolate(itp_pallpz, Linear())   # gives 1 on the left edge and 7 on the right edge
-
-        pallpz_ex = zeros(((128,64,20)))
-        pallpz_ex[:,:, 1:2]  .= etpf_pallpz[:,:,-2:-1]
-        pallpz_ex[:,:, 3:18] .= pallpz[:,:,1:16]
-        pallpz_ex[:,:,19:20] .= etpf_pallpz[:,:,17:18]
-        for i in 1:19
-            factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
-        end
-
-        factor2[:,:,20] .= 0.
-
-        ### After adding factor1 to factor2, then extrapolate
-        factor_odd             = zeros(((128,64,10)))
-        factor_even            = zeros(((128,64,10)))
-        factor_all             = zeros(((128,64,20)))
-
-        factor_odd[:,:, :] .= factor2[:,:,1:2:19]
-        factor_even[:,:,:] .= factor2[:,:,2:2:20]
-
-        itp_odd  = interpolate(factor_odd, BSpline(Cubic()))
-        itp_even = interpolate(factor_even, BSpline(Cubic()))
-
-        count = 1
-        for i in 1.5:1:9.5 # 11.5
-            factor_all[:,:,(count.*2)] .= itp_odd[:,:,i]
-            count += 1 # idx = 2~18
-        end
-
-        count = 2
-        for i in 1.5:1:9.5 # 0.5 10.5
-            factor_all[:,:,(count.*2 .- 1)] .= itp_even[:,:,i]
-            count += 1 # idx = 1~17
-        end
-        # itp_factor_all            = interpolate(itp_even, BSpline(Cubic()))  
-        etpf_factor_all           = extrapolate(itp_even, Linear())
-        factor_all[:,:,19] .=  etpf_factor_all[:,:,10.5]
-        factor_all[:,:,1]  .=  etpf_factor_all[:,:,0.5]
-
-        factor_all[:,:,20]   .= factor1[:,:,20]
-        
-        itp = interpolate(factor_all, BSpline(Cubic()))
-        factor_all[:,:,19]   .= itp[:,:,19]
-        
-    
-        # for i in 1:20
-        #     factor2[:,:,i] .= pallpz_ex[:,:,i] ./ rho[:,:,i] .* 2. .* Δt
-        # end        
-
-
+        K_E[:,:, 1:16] .= C_E .* V_a .* za[:,:,1] .* exp.(-((grid_p_half[:,:,17] .- grid_p_half[:,:,1:16]) ./ 10000.).^2)
         ### cal PBL Scheme
-        rho = zeros(((128,64,20)))
-        # rho_plus  = zeros(((128,64,20)))
-
-        for i in 1:20
-            rho[:,:,i] .= grid_p_half[:,:,i] ./ Rd ./ grid_t[:,:,i]
-            # rho_plus[ :,:,i] .= grid_p_half[:,:,i] ./ Rd ./ grid_t[:,:,i]
-        end
-
-        KE_minus = zeros(((128,64,20)))
-        KE_plus  = zeros(((128,64,20)))
-
-        for i in 1:20
-            KE_minus[:,:,i] .= C_E .* V_a .* grid_z_half[:,:,20] .* exp.(-((grid_p_half[:,:,17] .- grid_p_half[:,:,i])/10000.).^2.)
-            KE_plus[ :,:,i] .= C_E .* V_a .* grid_z_half[:,:,20]
-        end
-
         rpdel  = zeros(((128,64,20))) ### = 1 / (p^n_{+} - p^n_{-}) , which p^_{-} mean upper layer
         for i in 1:19
             rpdel[:,:,i] .= 1. ./ (grid_p_half[:,:,i+1] .- grid_p_half[:,:,i])
@@ -241,15 +142,17 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         CF     = zeros(((128,64,20+1)))
 
         for k in 1:19
-            CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* KE_plus[:,:,k+1]   .* rho[:,:,k+1].^2 
+            CA[:,:,k]   .= (rpdel[:,:,k]   .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1]   .* rho[:,:,k+1].^2 
                            ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
-            CC[:,:,k+1] .= (rpdel[:,:,k+1] .* 2. .* Δt .* grav.^2 .* KE_minus[:,:,k+1]  .* rho[:,:,k].^2
+            CC[:,:,k+1] .= (rpdel[:,:,k+1] .* 2. .* Δt .* grav.^2 .* K_E[:,:,k+1]   .* rho[:,:,k+1].^2
                            ./ (grid_p_full[:,:,k+1] .- grid_p_full[:,:,k]))
         end
+        
         CA[:,:,20]   .= 0.
         CC[:,:, 1]   .= 0.
         CE[:,:,21]   .= 0.
         CF[:,:,21]   .= 0.
+
         for k in 20:-1:1
             CE[:,:,k]    .= CC[:,:,k] ./ (1. .+ CA[:,:,k] .+ CC[:,:,k] .- CA[:,:,k] .* CE[:,:,k+1])
             CF[:,:,k]    .= ((grid_tracers_n[:,:,k] .+ CA[:,:,k] .* CF[:,:,k+1])
@@ -265,16 +168,8 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
             factor2[:,:,k]        .= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
             grid_tracers_n[:,:,k] .= CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k]
         end
-        # ################################################################################
+        ################################################################################
 
-        ### final correction
-        ### from line 128
-        # grid_tracers_n .+= factor1[:,:,20] ### directly add it would explode
-        ###
-
-        # mean_moisture_max_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n_max, grid_ps_n)
-        # grid_tracers_n_max ./= mean_moisture_max_n 
-        # factor4             .=  grid_tracers_n_max .* C_E
         # ### original ###
         factor11             = zeros(((128,64,20)))
         factor11            .= factor1 
@@ -292,7 +187,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         
         ### 10/30 
         @info "#### mass correction:", (mean_moisture_n - mean_moisture_p)
-        return factor1, factor2, factor3, K_E, pqpz_ex, rho
+        return factor1, factor2, factor3, K_E, rho
     end
     
 end 
@@ -546,21 +441,6 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     grid_δv  .+= grid_δQ
     Vert_Advection!(vert_coord, grid_t, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme, grid_δQ)
     grid_δt  .+= grid_δQ
-    ########################################
-    # ### 11/16
-    # θc, λc = mesh.θc,  mesh.λc
-    # grid_z_full = dyn_data.grid_z_full
-    # Ts  = zeros(((128,64,1)))
-    # for i in 1:128
-    #     Ts[i,:,1] .= 29 .* exp.(-θc.^2 ./ (2 * (26 .* pi ./180).^2)) .+ 271
-    # end
-    # # ∂T_a/∂t = C_E * V_a * (T_s - T_a) ./ z_a 
-    # C_E = 0.0011
-    # V_n  = zeros(((128,64,20)))
-    # V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
-    # V_a = V_n[:,:,20]
-    # grid_δt[:,:,20] .+= C_E .* V_a .* (Ts[:,:,1] .- grid_t_n[:,:,20]) ./ grid_z_full[:,:,20]
-    ##########################################
     ### By CJY2
     Vert_Advection!(vert_coord, grid_tracers_c, grid_Δp, grid_M_half, Δt, vert_coord.vert_advect_scheme,  grid_δQ)
     grid_δtracers .+= grid_δQ 
@@ -637,7 +517,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Trans_Spherical_To_Grid!(mesh, spe_t_n, grid_t_n) 
 
 
-    factor1_loc, factor2_loc, factor3_loc, K_E_loc, pqpz_loc, rho_loc = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p,mean_moisture_p, 
+    factor1_loc, factor2_loc, factor3_loc, K_E_loc, rho_loc = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p,mean_moisture_p, 
         grid_u_n, grid_v_n,
         grid_energy_full, grid_ps_p,grid_ps,
         grid_ps_n, spe_lnps_n, 
@@ -652,7 +532,7 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     add_water .= factor1 .+ factor2
 
     K_E .= K_E_loc
-    pqpz .= pqpz_loc
+    # pqpz .= pqpz_loc
 
     rho .= rho_loc
 
