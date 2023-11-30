@@ -96,13 +96,31 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         Rv = 461.
         Rd = 287.
         cp = 1004.
-        # ### factor3
+        # # ### factor3
         grid_tracers_n_max  = deepcopy(grid_tracers_n)
         grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
         factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
         grid_tracers_n .-= factor3
         grid_tracers_n[grid_tracers_n .< 0] .= 0 
-        
+        # dq = zeros(((128,64,20)))
+        # for k in 2:19
+        #     for j in 2:63
+        #         for i in 2:127  
+        #             if grid_tracers_n[i,j,k] .< 0. 
+        #                 # @info("e04")
+        #                 dq[i,j,k] -=   grid_tracers_n[i,j,k]
+        #                 # grid_tracers_n[i,j,k] .+= dq[i,j,k]
+    
+        #                 grid_tracers_n[i+1,j-1:j+1,k] .+= dq[i,j,k]
+        #                 grid_tracers_n[i-1,j-1:j+1,k] .+= dq[i,j,k]
+        #                 grid_tracers_n[i,j-1:j+1,k]   .+= dq[i,j,k]
+        #             end
+        #         end
+        #     end
+        # end        
+        # @info maximum(dq)
+
+
         ### 11/08
         V_n  = zeros(((128,64,20)))
         V_n .= (grid_u_n[:,:,:].^2 .+ grid_v_n[:,:,:].^2).^0.5
@@ -124,6 +142,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ### 
         
         factor1[:,:,20] .=  C_E .* V_n[:,:,20] .* (grid_tracers_n_max[:,:,20] .- min.(grid_tracers_n[:,:,20], grid_tracers_n_max[:,:,20])) ./ za[:,:,1] .* 2. .* Δt
+        grid_tracers_n[:,:,20] .= factor1[:,:,20]
 
         # eddy diffusivity coefficient, K_E
         V_a = V_n[:,:,20]
@@ -163,7 +182,7 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         factor2[:,:,1] .= (CF[:,:,1] .- grid_tracers_n[:,:,1])  # because CE at top = 0
         grid_tracers_n[:,:,1] .= CF[:,:,1] 
         # Loop over the remaining level
-        for k in 2:20
+        for k in 2:19
             grid_δtracers[:,:,k] .+= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
             factor2[:,:,k]        .= (CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k] .- grid_tracers_n[:,:,k]) 
             grid_tracers_n[:,:,k] .= CE[:,:,k] .* grid_tracers_n[:,:,k-1] .+ CF[:,:,k]
@@ -171,18 +190,40 @@ function Compute_Corrections!(semi_implicit::Semi_Implicit_Solver, vert_coord::V
         ################################################################################
 
         # ### original ###
-        factor11             = zeros(((128,64,20)))
-        factor11            .= factor1 
-        mean_factor11_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor11, grid_ps_n)
-        mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
-        factor11           .*= (mean_moisture_p-mean_moisture_n)/mean_factor11_n
-        grid_tracers_n     .+=  factor11
+        # factor11             = zeros(((128,64,20)))
+        # factor11            .= factor1 
+        # mean_factor11_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor11, grid_ps_n)
+        # mean_moisture_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # factor11           .*= (mean_moisture_p-mean_moisture_n)/mean_factor11_n
+        # grid_tracers_n     .+=  factor11
         # ###
 
         # mean_factor_all_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor_all, grid_ps_n)
         # mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         # factor_all           .*= (mean_moisture_p-mean_moisture_n)/mean_factor_all_n
         # grid_tracers_n     .+=  factor_all
+        # mean_factor_all_n      =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, factor_all, grid_ps_n)
+        # grid_tracers_n[grid_tracers_n .< 0.] .= 0.
+        # mean_moisture_n       =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
+        # factor_all           .*= (mean_moisture_p-mean_moisture_n)/mean_factor_all_n
+        # grid_tracers_n     .*= mean_moisture_p ./ mean_moisture_n 
+        # dq = zeros(((128,64,20)))
+        # for k in 1:20
+        #     for j in 1:64
+        #         for i in 1:128  
+        #             if grid_tracers_n[i,j,k] .< 0.
+        #                 @info("e04")
+        #                 dq[i,j,k] =  grid_tracers_n[i,j,k]
+        #                 # grid_tracers_n[i,j,k] .+= dq[i,j,k]
+    
+        #                 grid_tracers_n[i+1,j-1:j+1,k] .+= dq[i,j,k]
+        #                 grid_tracers_n[i-1,j-1:j+1,k] .+= dq[i,j,k]
+        #                 grid_tracers_n[i,j-1:j+1,k]   .+= dq[i,j,k]
+        #             end
+        #         end
+        #     end
+        # end
+
         mean_moisture_n  =  Mass_Weighted_Global_Integral(vert_coord, mesh, atmo_data, grid_tracers_n, grid_ps_n)
         
         ### 10/30 
@@ -360,8 +401,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     
     grid_tracers_diff = dyn_data.grid_tracers_diff
     
-    spe_δtracers   = dyn_data.spe_δtracers  .*0.
-    grid_δtracers  = dyn_data.grid_δtracers .*0.
+    spe_δtracers   = dyn_data.spe_δtracers  
+    grid_δtracers  = dyn_data.grid_δtracers 
     grid_tracers_full = dyn_data.grid_tracers_full
     
     ### 11/07
@@ -407,8 +448,6 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     
     # compute pressure based on grid_ps -> grid_p_half, grid_lnp_half, grid_p_full, grid_lnp_full 
     Pressure_Variables!(vert_coord, grid_ps, grid_p_half, grid_Δp, grid_lnp_half, grid_p_full, grid_lnp_full)
-
-
     ###
     
     # compute ∇ps = ∇lnps * ps
@@ -451,22 +490,13 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Filtered_Leapfrog!(integrator, spe_δtracers, spe_tracers_p, spe_tracers_c, spe_tracers_n)
     Trans_Spherical_To_Grid!(mesh, spe_tracers_n, grid_tracers_n)
     ###
-    ### factor3
-    Lv = 2.5*10^6.
-    Rv = 461.
-    Rd = 287.
-    cp = 1004.
-    grid_tracers_n_max  = deepcopy(grid_tracers_n)
-    grid_tracers_n_max .= (0.622 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) ./ (grid_p_full .- 0.378 .* (611.12 .* exp.(Lv ./ Rv .* (1. ./ 273.15 .- 1. ./ grid_t_n)) )) 
-    factor3 .= (max.(grid_tracers_n, grid_tracers_n_max) .- grid_tracers_n_max) 
-
-    grid_tracers_n .-= factor3
-    grid_tracers_n[grid_tracers_n .< 0] .= 0 
-
-    ###
-   
-    ###
     Add_Horizontal_Advection!(mesh, spe_t_c, grid_u, grid_v, grid_δt)
+    ###
+
+
+
+
+    ###
     grid_tracers_diff_new = HS_forcing_water_vapor!(semi_implicit, grid_tracers_c,  grid_t, grid_δt, grid_p_full, grid_u, grid_v, factor3)
     grid_tracers_diff    .= grid_tracers_diff_new
     ### 10/30
@@ -515,7 +545,8 @@ function Spectral_Dynamics!(mesh::Spectral_Spherical_Mesh,  vert_coord::Vert_Coo
     Trans_Spherical_To_Grid!(mesh, spe_lnps_n, grid_lnps)
     grid_ps_n .= exp.(grid_lnps)
     Trans_Spherical_To_Grid!(mesh, spe_t_n, grid_t_n) 
-
+    spe_δtracers   .= 0.
+    grid_δtracers  .= 0.
 
     factor1_loc, factor2_loc, factor3_loc, K_E_loc, rho_loc = Compute_Corrections!(semi_implicit, vert_coord, mesh, atmo_data, mean_ps_p, mean_energy_p,mean_moisture_p, 
         grid_u_n, grid_v_n,
@@ -604,59 +635,59 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
 
     
     # ### 11/02
-    read_file  = load("300day_dry_run_all.dat")
-    initial_day = 300
+    # read_file  = load("300day_dry_run_all.dat")
+    # initial_day = 300
     # # ### 11/08
-    grid_z_full .= read_file["grid_z_full_xyzt"][:,:,:,initial_day]
-    grid_w_full .= read_file["grid_w_full_xyzt"][:,:,:,initial_day]
-    # ###
-    grid_δu       .= read_file["grid_δu_xyzt"][:,:,:,initial_day]
-    grid_δv       .= read_file["grid_δv_xyzt"][:,:,:,initial_day]
-    grid_δt       .= read_file["grid_δt_xyzt"][:,:,:,initial_day]
-    grid_δps       .= read_file["grid_δps_xyzt"][:,:,1,initial_day]
+    # grid_z_full .= read_file["grid_z_full_xyzt"][:,:,:,initial_day]
+    # grid_w_full .= read_file["grid_w_full_xyzt"][:,:,:,initial_day]
+    # # ###
+    # grid_δu       .= read_file["grid_δu_xyzt"][:,:,:,initial_day]
+    # grid_δv       .= read_file["grid_δv_xyzt"][:,:,:,initial_day]
+    # grid_δt       .= read_file["grid_δt_xyzt"][:,:,:,initial_day]
+    # grid_δps       .= read_file["grid_δps_xyzt"][:,:,1,initial_day]
 
-    grid_p_half .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
-    grid_p_full .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
+    # grid_p_half .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
+    # grid_p_full .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
 
     
     
     rdgas = atmo_data.rdgas
-    # grid_t    .= init_t
+    grid_t    .= init_t
     ### 2023/10/27
-    grid_t    .= read_file["grid_t_c_xyzt"][:,:,:,initial_day] 
+    # grid_t    .= read_file["grid_t_c_xyzt"][:,:,:,initial_day] 
     ###
     # dΦ/dlnp = -RT    Δp = -ΔΦ/RT
-    grid_geopots .= read_file["grid_geopots_xyzt"][:,:,:,initial_day]
-    # grid_lnps .= log(sea_level_ps_ref) .- grid_geopots / (rdgas * init_t)
-    grid_lnps .= read_file["grid_lnps_xyzt"][:,:,1,initial_day]
-    # grid_ps   .= exp.(grid_lnps)
-    grid_ps    .= read_file["grid_ps_xyzt"][:,:,1,initial_day]
+    # grid_geopots .= read_file["grid_geopots_xyzt"][:,:,:,initial_day]
+    grid_lnps .= log(sea_level_ps_ref) .- grid_geopots / (rdgas * init_t)
+    # grid_lnps .= read_file["grid_lnps_xyzt"][:,:,1,initial_day]
+    grid_ps   .= exp.(grid_lnps)
+    # grid_ps    .= read_file["grid_ps_xyzt"][:,:,1,initial_day]
     
 
     # By CJY
-    # spe_div_c .= 0.0
-    # spe_vor_c .= 0.0
+    spe_div_c .= 0.0
+    spe_vor_c .= 0.0
 
     # # initial perturbation
     num_fourier, num_spherical = mesh.num_fourier, mesh.num_spherical
     
-    # initial_perturbation = 1.0e-7/sqrt(2.0)
+    initial_perturbation = 1.0e-7/sqrt(2.0)
     # initial vorticity perturbation used in benchmark code
     # In gfdl spe[i,j] =  myspe[i, i+j-1]*√2
-    """
+    
     for k = nd-2:nd
         spe_vor_c[2,5,k] = initial_perturbation
         spe_vor_c[6,9,k] = initial_perturbation
         spe_vor_c[2,4,k] = initial_perturbation  
         spe_vor_c[6,8,k] = initial_perturbation
     end
-    """
+    
 
     ##
-    spe_vor_c[:,:,:] .= read_file["spe_vor_c_xyzt"][:,:,:,initial_day]
-    spe_div_c[:,:,:] .= read_file["spe_div_c_xyzt"][:,:,:,initial_day]
-    grid_u[:,:,:]    .= read_file["grid_u_c_xyzt"][:,:,:,initial_day]
-    grid_v[:,:,:]    .= read_file["grid_v_c_xyzt"][:,:,:,initial_day]  
+    # spe_vor_c[:,:,:] .= read_file["spe_vor_c_xyzt"][:,:,:,initial_day]
+    # spe_div_c[:,:,:] .= read_file["spe_div_c_xyzt"][:,:,:,initial_day]
+    # grid_u[:,:,:]    .= read_file["grid_u_c_xyzt"][:,:,:,initial_day]
+    # grid_v[:,:,:]    .= read_file["grid_v_c_xyzt"][:,:,:,initial_day]  
     
     UV_Grid_From_Vor_Div!(mesh, spe_vor_c, spe_div_c, grid_u, grid_v)
     
@@ -679,11 +710,11 @@ function Spectral_Initialize_Fields!(mesh::Spectral_Spherical_Mesh, atmo_data::A
     Trans_Spherical_To_Grid!(mesh, spe_div_c, grid_div)
 
     #update pressure variables for hs forcing
-    grid_p_half   .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
-    grid_Δp       .= read_file["grid_Δp_xyzt"][:,:,:,initial_day]
-    grid_lnp_half .= read_file["grid_lnp_half_xyzt"][:,:,:,initial_day]
-    grid_p_full   .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
-    grid_lnp_full .= read_file["grid_lnp_full_xyzt"][:,:,:,initial_day]
+    # grid_p_half   .= read_file["grid_p_half_xyzt"][:,:,:,initial_day]
+    # grid_Δp       .= read_file["grid_Δp_xyzt"][:,:,:,initial_day]
+    # grid_lnp_half .= read_file["grid_lnp_half_xyzt"][:,:,:,initial_day]
+    # grid_p_full   .= read_file["grid_p_full_xyzt"][:,:,:,initial_day]
+    # grid_lnp_full .= read_file["grid_lnp_full_xyzt"][:,:,:,initial_day]
         
     Pressure_Variables!(vert_coord, grid_ps, grid_p_half, grid_Δp,
     grid_lnp_half, grid_p_full, grid_lnp_full)
