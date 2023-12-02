@@ -28,7 +28,7 @@ function Atmos_Spectral_Dynamics_Main(physcis_params::Dict{String, Float64}, end
     do_energy_correction = true
     do_water_correction = true
     
-    use_virtual_temperature = false
+    use_virtual_temperature = true
     atmo_data = Atmo_Data(name, nλ, nθ, nd, do_mass_correction, do_energy_correction, do_water_correction, use_virtual_temperature, sinθ, radius,  omega)
     
     # Initialize integrator

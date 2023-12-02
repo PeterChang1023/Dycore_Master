@@ -4,14 +4,14 @@ function Compute_Pressures_And_Heights!(atmo_data::Atmo_Data, vert_coord::Vert_C
                                       grid_ps::Array{Float64,3}, grid_geopots::Array{Float64,3}, grid_t::Array{Float64,3}, 
                                       grid_p_half::Array{Float64,3},  grid_Δp::Array{Float64,3},
                                       grid_lnp_half::Array{Float64,3}, grid_p_full::Array{Float64,3}, grid_lnp_full::Array{Float64,3},
-                                      grid_z_full::Array{Float64,3}, grid_z_half::Array{Float64,3})
+                                      grid_z_full::Array{Float64,3}, grid_z_half::Array{Float64,3}, grid_tracers_n::Array{Float64, 3})
 
   grav = atmo_data.grav
 
   Pressure_Variables!(vert_coord, grid_ps, grid_p_half, grid_Δp,
                        grid_lnp_half, grid_p_full, grid_lnp_full)
 
-  Compute_Geopotential!(vert_coord,atmo_data, grid_lnp_half, grid_lnp_full,  grid_t, grid_geopots, grid_z_full, grid_z_half)
+  Compute_Geopotential!(vert_coord,atmo_data, grid_lnp_half, grid_lnp_full,  grid_t, grid_geopots, grid_z_full, grid_z_half, grid_tracers_n)
 
   grid_z_full ./= grav
   grid_z_half ./= grav
@@ -71,7 +71,7 @@ end
 function Compute_Geopotential!(vert_coord::Vert_Coordinate, atmo_data::Atmo_Data, 
   grid_lnp_half::Array{Float64, 3}, grid_lnp_full::Array{Float64, 3},  
   grid_t::Array{Float64, 3}, 
-  grid_geopots::Array{Float64, 3}, grid_geopot_full::Array{Float64, 3}, grid_geopot_half::Array{Float64, 3})
+  grid_geopots::Array{Float64, 3}, grid_geopot_full::Array{Float64, 3}, grid_geopot_half::Array{Float64, 3}, grid_tracers_n::Array{Float64, 3})
   
   use_virtual_temperature = atmo_data.use_virtual_temperature
   rvgas, rdgas = atmo_data.rvgas, atmo_data.rdgas
@@ -87,16 +87,23 @@ function Compute_Geopotential!(vert_coord::Vert_Coordinate, atmo_data::Atmo_Data
   else
     k_top = 1
   end
-  
+  """
   # if (use_virtual_temperature) 
   #   virtual_t = grid_t .* (1. + (rvgas/rdgas - 1.)*grid_q)
   # else
   #   virtual_t = grid_t
   # end
-
-
-  virtual_t = grid_t
   
+  virtual_t = grid_t
+  """
+  # virtual_t = deepcopy(grid_tracers_n)
+  # if (use_virtual_temperature) 
+  #   virtual_t .= grid_t .* (1. .+ (rvgas/rdgas - 1.) * grid_tracers_n)
+  # else
+  #   virtual_t = grid_t
+  # end
+  
+  virtual_t = grid_t
   
   for k=nd:-1:k_top
     #Φ_{k-1/2} = Φ_{k+1/2} + RT_k(ln p_{k+1/2} - ln p_{k-1})

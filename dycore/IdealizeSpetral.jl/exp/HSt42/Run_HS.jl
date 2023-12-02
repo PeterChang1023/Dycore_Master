@@ -3,7 +3,7 @@ using JGCM
 include("HS.jl")
 
 #############################################################
-end_day = 300
+end_day = 5
 spinup_day = 0
 
 physics_params = Dict{String,Float64}("σ_b"=>0.7, "k_f" => 1.0, "k_a" => 1.0/40.0, "k_s" => 1.0/4.0, "ΔT_y" => 60.0, "Δθ_z" => 10.0) ### 60.0
@@ -29,11 +29,20 @@ op_man = Atmos_Spectral_Dynamics_Main(physics_params, end_day, spinup_day)
 # Finalize_Output!(op_man, "day200_qv_v_test_final.dat", "day200_qv_v_test_all.dat")
 
 # Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
+Finalize_Output!(op_man, "test_final.dat", "test_all.dat")
+
+# Finalize_Output!(op_man, "revise_geopot_final.dat", "revise_geopot_all.dat")
+# Finalize_Output!(op_man, "200day_revise_geopot_final.dat", "200day_revise_geopot_all.dat")
+
 # Finalize_Output!(op_man, "25day_factor2_new_final.dat", "25day_factor2_new_all.dat")
 # Finalize_Output!(op_man, "25day_from_dry_final.dat", "25day_from_dry_all.dat")
 # Finalize_Output!(op_man, "50day_from_dry_final.dat", "50day_from_dry_all.dat")
 # Finalize_Output!(op_man, "100day_from_dry_final.dat", "100day_from_dry_all.dat")
-Finalize_Output!(op_man, "300day_from_dry_final.dat", "300day_from_dry_all.dat")
+
+# Finalize_Output!(op_man, "correction2_100day_from_dry_final.dat", "correction2_100day_from_dry_all.dat")
+# Finalize_Output!(op_man, "correction2_300day_from_dry_final.dat", "correction2_300day_from_dry_all.dat")
+
+# Finalize_Output!(op_man, "300day_from_dry_final.dat", "300day_from_dry_all.dat")
 
 # Finalize_Output!(op_man, "25day_L10_final.dat", "25day_L10_all.dat")
 # Finalize_Output!(op_man, "100day_L10_final.dat", "100day_L10_all.dat")
