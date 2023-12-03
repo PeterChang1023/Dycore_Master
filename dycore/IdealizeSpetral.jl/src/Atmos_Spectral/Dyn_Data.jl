@@ -358,7 +358,7 @@ function Dyn_Data(name::String, num_fourier::Int64, num_spherical::Int64, nλ::I
 
 
 
-    K_E = zeros(Float64, nλ,  nθ, nd)
+    K_E = zeros(Float64, nλ,  nθ, nd+1)
     pqpz = zeros(Float64, nλ,  nθ, nd)
 
     rho = zeros(Float64, nλ,  nθ, nd)

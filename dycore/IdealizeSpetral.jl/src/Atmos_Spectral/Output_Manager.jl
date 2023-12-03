@@ -199,7 +199,7 @@ function Output_Manager(mesh::Spectral_Spherical_Mesh, vert_coord::Vert_Coordina
 
 
 
-    K_E_xyzt = zeros(Float64, nλ,  nθ, nd, n_day)
+    K_E_xyzt = zeros(Float64, nλ,  nθ, nd+1, n_day)
     pqpz_xyzt = zeros(Float64, nλ,  nθ, nd, n_day)
 
     rho_xyzt = zeros(Float64, nλ,  nθ, nd, n_day)
