@@ -12,11 +12,13 @@ op_man = Atmos_Spectral_Dynamics_Main(physics_params, end_day, spinup_day)
 # Finalize_Output!(op_man, "HS_front_RH80_PR0_PRRELAX86400_with_w_all_final.dat", "HS_front_RH80_PR0_PRRELAX86400_with_w_all.dat")
 
 # Finalize_Output!(op_man, "RH80_test_f0_final.dat", "RH80_test_f0_all.dat")
-Finalize_Output!(op_man, "RH50_PR15_1600day_test_all.dat", "RH50_PR15_1600day_test_final.dat")
-# Finalize_Output!(op_man, "test_all.dat", "test_final.dat")
+# Finalize_Output!(op_man, "t_init_RH80_PR5_1600day_test_all.dat", "t_init_RH80_PR5_1600day_test_final.dat")
+# Finalize_Output!(op_man, "t_init_RH80_PR10_1200day_test_all.dat", "t_init_RH80_PR10_1200day_test_final.dat")
 
-# Finalize_Output!(op_man, "test_with_vor_final.dat", "test_with_vor_all.dat")
+# Finalize_Output!(op_man, "t_init_RH60_PR10_1600day_test_all.dat", "t_init_RH60_PR10_1600day_test_final.dat")
 
+# Finalize_Output!(op_man, "t_init_RH62_PR10_1600day_test_all.dat", "t_init_RH62_PR10_1600day_test_final.dat")
+Finalize_Output!(op_man, "t_init_RH63_PR10_1600day_test_all.dat", "t_init_RH63_PR10_1600day_test_final.dat")
 
 
 # Sigma_Zonal_Mean_Contourf(op_man, "Contourf")
